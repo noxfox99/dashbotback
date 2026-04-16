@@ -1,12 +1,12 @@
-const express = require(‘express’);
-const https   = require(‘https’);
-const http    = require(‘http’);
-const path    = require(‘path’);
-const crypto  = require(‘crypto’);
+const express = require('express');
+const https   = require('https');
+const http    = require('http');
+const path    = require('path');
+const crypto  = require('crypto');
 
 const app = express();
-app.use(express.json({ limit: ‘1mb’ }));
-app.use(express.static(path.join(__dirname, ‘public’)));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ─────────────────────────────────────────────────────────────────
 // Low-level HTTP helper
@@ -14,31 +14,31 @@ app.use(express.static(path.join(__dirname, ‘public’)));
 function rawRequest(targetUrl, method, headers, bodyStr) {
 return new Promise((resolve, reject) => {
 const u      = new URL(targetUrl);
-const lib    = u.protocol === ‘https:’ ? https : http;
-const bodyBuf = bodyStr ? Buffer.from(bodyStr, ‘utf8’) : null;
+const lib    = u.protocol === 'https:' ? https : http;
+const bodyBuf = bodyStr ? Buffer.from(bodyStr, 'utf8') : null;
 const reqHeaders = {
-‘host’:         u.hostname,
-‘content-type’: ‘application/json’,
-‘accept’:       ‘application/json’,
+'host':         u.hostname,
+'content-type': 'application/json',
+'accept':       'application/json',
 …headers,
 };
-if (bodyBuf) reqHeaders[‘content-length’] = String(bodyBuf.length);
+if (bodyBuf) reqHeaders['content-length'] = String(bodyBuf.length);
 const opts = {
 hostname: u.hostname,
-port:     u.port || (u.protocol === ‘https:’ ? 443 : 80),
+port:     u.port || (u.protocol === 'https:' ? 443 : 80),
 path:     u.pathname + u.search,
 method:   method.toUpperCase(),
 headers:  reqHeaders,
 };
 const req = lib.request(opts, res => {
 const chunks = [];
-res.on(‘data’, c => chunks.push(c));
-res.on(‘end’, () => resolve({
+res.on('data', c => chunks.push(c));
+res.on('end', () => resolve({
 status:  res.statusCode,
-rawBody: Buffer.concat(chunks).toString(‘utf8’),
+rawBody: Buffer.concat(chunks).toString('utf8'),
 }));
 });
-req.on(‘error’, reject);
+req.on('error', reject);
 if (bodyBuf) req.write(bodyBuf);
 req.end();
 });
@@ -50,7 +50,7 @@ catch { return { ok: false, data: null, raw: str  }; }
 }
 
 function hmacB64(secret, message) {
-return crypto.createHmac(‘sha256’, secret).update(message).digest(‘base64’);
+return crypto.createHmac('sha256', secret).update(message).digest('base64');
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -62,27 +62,27 @@ return crypto.createHmac(‘sha256’, secret).update(message).digest(‘base64�
 // “path” is ambiguous — we try 3 variants in order and return
 // the first non-401/403 response. Railway logs show which worked.
 // ─────────────────────────────────────────────────────────────────
-app.post(’/proxy/gasfree’, async (req, res) => {
+app.post('/proxy/gasfree', async (req, res) => {
 const { gfPath, method, body, apiKey, apiSecret, baseUrl } = req.body || {};
 
 if (!gfPath || !apiKey || !apiSecret) {
-return res.status(400).json({ error: ‘Missing gfPath / apiKey / apiSecret’ });
+return res.status(400).json({ error: 'Missing gfPath / apiKey / apiSecret' });
 }
 
-const m          = (method || ‘GET’).toUpperCase();
+const m          = (method || 'GET').toUpperCase();
 const ts         = Math.floor(Date.now() / 1000);
-const targetBase = (baseUrl || ‘https://open.gasfree.io/tron’).replace(//$/, ‘’);
+const targetBase = (baseUrl || 'https://open.gasfree.io/tron').replace(//$/, '');
 const targetUrl  = targetBase + gfPath;
 const bodyStr    = body ? JSON.stringify(body) : null;
 
 // Extract the prefix path from baseUrl  e.g. “https://open.gasfree.io/tron” → “/tron”
-const basePrefix = new URL(targetBase).pathname.replace(//$/, ‘’); // “/tron” or “/nile”
+const basePrefix = new URL(targetBase).pathname.replace(//$/, ''); // “/tron” or “/nile”
 
 // 3 signature variants
 const signPaths = [
 gfPath,                   // /api/v1/address/T…
 basePrefix + gfPath,      // /tron/api/v1/address/T…
-gfPath.replace(’/api’, ‘’), // /v1/address/T…  (some docs omit /api)
+gfPath.replace('/api', ''), // /v1/address/T…  (some docs omit /api)
 ];
 
 console.log(`\n[GF] ${m} ${targetUrl}  ts=${ts}`);
@@ -91,14 +91,14 @@ const msg = `${m}${p}${ts}`;
 console.log(`[GF] variant${i+1}: "${msg.substring(0,80)}"`);
 });
 
-let lastResult = { status: 500, rawBody: ‘No attempt made’ };
+let lastResult = { status: 500, rawBody: 'No attempt made' };
 
 for (let i = 0; i < signPaths.length; i++) {
 const message   = `${m}${signPaths[i]}${ts}`;
 const signature = hmacB64(apiSecret, message);
 const headers   = {
-‘timestamp’:     String(ts),
-‘authorization’: `ApiKey ${apiKey}:${signature}`,
+'timestamp':     String(ts),
+'authorization': `ApiKey ${apiKey}:${signature}`,
 };
 
 ```
@@ -125,7 +125,7 @@ const p = safeParse(lastResult.rawBody);
 return res.status(lastResult.status).json({
 error:  p.ok ? (p.data.message || p.data.msg || JSON.stringify(p.data)) : lastResult.rawBody,
 _debug: {
-hint:      ‘All 3 HMAC variants returned 401/403 — double-check API Key and Secret in Config’,
+hint:      'All 3 HMAC variants returned 401/403 — double-check API Key and Secret in Config',
 ts,
 method:    m,
 gfPath,
@@ -138,15 +138,15 @@ signedPaths: signPaths.map(sp => `${m}${sp}${ts}`),
 // ─────────────────────────────────────────────────────────────────
 // /proxy/trongrid
 // ─────────────────────────────────────────────────────────────────
-app.post(’/proxy/trongrid’, async (req, res) => {
+app.post('/proxy/trongrid', async (req, res) => {
 const { tgPath, method, body, apiKey, rpc } = req.body || {};
-if (!tgPath) return res.status(400).json({ error: ‘Missing tgPath’ });
+if (!tgPath) return res.status(400).json({ error: 'Missing tgPath' });
 
-const targetUrl = (rpc || ‘https://api.trongrid.io’).replace(//$/, ‘’) + tgPath;
-const m         = (method || ‘GET’).toUpperCase();
+const targetUrl = (rpc || 'https://api.trongrid.io').replace(//$/, '') + tgPath;
+const m         = (method || 'GET').toUpperCase();
 const bodyStr   = body ? JSON.stringify(body) : null;
 const headers   = {};
-if (apiKey) headers[‘tron-pro-api-key’] = apiKey;
+if (apiKey) headers['tron-pro-api-key'] = apiKey;
 
 console.log(`[TG] ${m} ${targetUrl}`);
 
@@ -157,7 +157,7 @@ const p = safeParse(result.rawBody);
 if (p.ok) return res.status(result.status).json(p.data);
 return res.status(result.status).json({ error: result.rawBody });
 } catch (e) {
-console.error(’[TG error]’, e.message);
+console.error('[TG error]', e.message);
 return res.status(500).json({ error: e.message });
 }
 });
@@ -165,8 +165,8 @@ return res.status(500).json({ error: e.message });
 // ─────────────────────────────────────────────────────────────────
 // Health
 // ─────────────────────────────────────────────────────────────────
-app.get(’/health’, (*, res) => res.json({ ok: true, ts: Date.now(), node: process.version }));
-app.get(’*’, (*, res) => res.sendFile(path.join(__dirname, ‘public’, ‘index.html’)));
+app.get('/health', (*, res) => res.json({ ok: true, ts: Date.now(), node: process.version }));
+app.get('*', (*, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
