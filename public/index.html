@@ -4,18 +4,128 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TRON GasFree — Панель управления</title>
-<script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.min.js"></script>
 <script>
-// Buffer polyfill for TronWeb in browser
-if (typeof window !== 'undefined' && typeof window.Buffer === 'undefined') {
-  window.Buffer = buffer.Buffer;
-}
-if (typeof globalThis !== 'undefined' && typeof globalThis.Buffer === 'undefined') {
-  globalThis.Buffer = buffer.Buffer;
-}
-if (typeof global === 'undefined') {
-  window.global = window;
-}
+// ── Buffer polyfill for TronWeb ──────────────────────────────────
+// Inline implementation — no external CDN dependency, always works
+(function() {
+  if (typeof window.Buffer !== 'undefined' && typeof window.Buffer.from === 'function') return;
+
+  // Minimal Buffer polyfill that covers everything TronWeb needs
+  function Buffer(arg, encodingOrOffset, length) {
+    if (!(this instanceof Buffer)) return new Buffer(arg, encodingOrOffset, length);
+    if (typeof arg === 'number') {
+      this._bytes = new Uint8Array(arg);
+    } else if (arg instanceof Uint8Array || arg instanceof ArrayBuffer) {
+      this._bytes = new Uint8Array(arg);
+    } else if (Array.isArray(arg)) {
+      this._bytes = new Uint8Array(arg);
+    } else if (typeof arg === 'string') {
+      const enc = encodingOrOffset || 'utf8';
+      if (enc === 'hex') {
+        const bytes = [];
+        for (let i = 0; i < arg.length; i += 2) bytes.push(parseInt(arg.substr(i,2), 16));
+        this._bytes = new Uint8Array(bytes);
+      } else if (enc === 'base64') {
+        const bin = atob(arg);
+        this._bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) this._bytes[i] = bin.charCodeAt(i);
+      } else {
+        // utf8
+        this._bytes = new TextEncoder().encode(arg);
+      }
+    } else {
+      this._bytes = new Uint8Array(0);
+    }
+    this.length = this._bytes.length;
+    for (let i = 0; i < this._bytes.length; i++) this[i] = this._bytes[i];
+  }
+
+  Buffer.from = function(arg, enc) {
+    if (arg instanceof Buffer) return new Buffer(arg._bytes);
+    if (arg instanceof Uint8Array || arg instanceof ArrayBuffer) return new Buffer(arg);
+    if (Array.isArray(arg)) return new Buffer(arg);
+    if (typeof arg === 'string') return new Buffer(arg, enc || 'utf8');
+    if (arg && typeof arg === 'object' && arg.type === 'Buffer' && Array.isArray(arg.data)) return new Buffer(arg.data);
+    throw new TypeError('Buffer.from: unsupported type ' + typeof arg);
+  };
+
+  Buffer.alloc = function(size, fill) {
+    const b = new Buffer(size);
+    if (fill !== undefined) b._bytes.fill(typeof fill === 'string' ? fill.charCodeAt(0) : fill);
+    return b;
+  };
+
+  Buffer.allocUnsafe = function(size) { return new Buffer(size); };
+
+  Buffer.isBuffer = function(obj) { return obj instanceof Buffer; };
+
+  Buffer.isEncoding = function(enc) {
+    return ['utf8','utf-8','hex','base64','ascii','binary','latin1'].includes((enc||'').toLowerCase());
+  };
+
+  Buffer.concat = function(list, totalLength) {
+    if (!totalLength) totalLength = list.reduce((s, b) => s + b.length, 0);
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const b of list) {
+      result.set(b._bytes || b, offset);
+      offset += b.length;
+    }
+    return Buffer.from(result);
+  };
+
+  Buffer.prototype.toString = function(enc) {
+    enc = (enc || 'utf8').toLowerCase();
+    if (enc === 'hex') {
+      return Array.from(this._bytes).map(b => b.toString(16).padStart(2,'0')).join('');
+    }
+    if (enc === 'base64') {
+      let bin = '';
+      this._bytes.forEach(b => bin += String.fromCharCode(b));
+      return btoa(bin);
+    }
+    // utf8
+    return new TextDecoder().decode(this._bytes);
+  };
+
+  Buffer.prototype.slice = function(start, end) {
+    return Buffer.from(this._bytes.slice(start, end));
+  };
+
+  Buffer.prototype.copy = function(target, targetStart) {
+    targetStart = targetStart || 0;
+    for (let i = 0; i < this._bytes.length; i++) {
+      target[targetStart + i] = this._bytes[i];
+    }
+  };
+
+  Buffer.prototype.readUInt32BE = function(offset) {
+    return ((this._bytes[offset]<<24)|(this._bytes[offset+1]<<16)|(this._bytes[offset+2]<<8)|this._bytes[offset+3]) >>> 0;
+  };
+
+  Buffer.prototype.writeUInt32BE = function(val, offset) {
+    this._bytes[offset]   = (val >>> 24) & 0xff;
+    this._bytes[offset+1] = (val >>> 16) & 0xff;
+    this._bytes[offset+2] = (val >>>  8) & 0xff;
+    this._bytes[offset+3] =  val         & 0xff;
+  };
+
+  Buffer.prototype.fill = function(val) {
+    this._bytes.fill(typeof val === 'string' ? val.charCodeAt(0) : val);
+    return this;
+  };
+
+  Buffer.prototype[Symbol.iterator] = function*() {
+    for (let i = 0; i < this._bytes.length; i++) yield this._bytes[i];
+  };
+
+  // Install globally
+  window.Buffer   = Buffer;
+  globalThis.Buffer = Buffer;
+  if (typeof global === 'undefined') window.global = window;
+
+  console.log('[Buffer polyfill] installed, Buffer.from =', typeof Buffer.from);
+})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.2/dist/TronWeb.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
