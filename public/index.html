@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TRON GasFree — Панель управления</title>
+<script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.min.js"></script>
+<script>
+// Buffer polyfill for TronWeb in browser
+if (typeof window !== 'undefined' && typeof window.Buffer === 'undefined') {
+  window.Buffer = buffer.Buffer;
+}
+if (typeof globalThis !== 'undefined' && typeof globalThis.Buffer === 'undefined') {
+  globalThis.Buffer = buffer.Buffer;
+}
+if (typeof global === 'undefined') {
+  window.global = window;
+}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.2/dist/TronWeb.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -727,10 +740,33 @@ function deriveAddressFromKey(privKey) {
 // TIP-712 SIGNATURE
 // ═══════════════════════════════════════════════════════════════
 async function signPermitTransfer(privKey, permitMessage) {
+  // Ensure Buffer polyfill is active before TronWeb signing
+  if (typeof Buffer === 'undefined' && typeof window.Buffer !== 'undefined') {
+    window.Buffer = window.Buffer;
+  }
+  if (typeof Buffer === 'undefined') {
+    throw new Error('Buffer не определён. Перезагрузите страницу (Ctrl+Shift+R).');
+  }
+
   const tw = getTronWeb(privKey);
   const domain = cfg().net === 'nile' ? GASFREE_DOMAIN_NILE : GASFREE_DOMAIN_MAINNET;
-  // _signTypedData returns hex string, may or may not have 0x prefix
-  const sig = await tw.trx._signTypedData(domain, PERMIT_TYPES, permitMessage);
+
+  // Convert address fields from base58 to hex for EIP-712
+  // TronWeb _signTypedData expects hex addresses (0x prefixed) for address type fields
+  const domainForSign = { ...domain };
+  const msgForSign = { ...permitMessage };
+
+  let sig;
+  try {
+    sig = await tw.trx._signTypedData(domainForSign, PERMIT_TYPES, msgForSign);
+  } catch(e) {
+    // Fallback: try tronWeb.trx.signTypedData if available (v6)
+    if (tw.trx.signTypedData) {
+      sig = await tw.trx.signTypedData(domainForSign, PERMIT_TYPES, msgForSign, privKey);
+    } else {
+      throw e;
+    }
+  }
   return sig.replace(/^0x/, '');
 }
 
