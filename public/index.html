@@ -5,126 +5,173 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TRON GasFree — Панель управления</title>
 <script>
-// ── Buffer polyfill for TronWeb ──────────────────────────────────
-// Inline implementation — no external CDN dependency, always works
+// ── Buffer polyfill — extends Uint8Array so instanceof checks pass ──
 (function() {
-  if (typeof window.Buffer !== 'undefined' && typeof window.Buffer.from === 'function') return;
+  if (typeof window.Buffer !== 'undefined'
+      && typeof window.Buffer.from === 'function'
+      && window.Buffer.prototype instanceof Uint8Array) return;
 
-  // Minimal Buffer polyfill that covers everything TronWeb needs
-  function Buffer(arg, encodingOrOffset, length) {
-    if (!(this instanceof Buffer)) return new Buffer(arg, encodingOrOffset, length);
-    if (typeof arg === 'number') {
-      this._bytes = new Uint8Array(arg);
-    } else if (arg instanceof Uint8Array || arg instanceof ArrayBuffer) {
-      this._bytes = new Uint8Array(arg);
-    } else if (Array.isArray(arg)) {
-      this._bytes = new Uint8Array(arg);
-    } else if (typeof arg === 'string') {
-      const enc = encodingOrOffset || 'utf8';
-      if (enc === 'hex') {
-        const bytes = [];
-        for (let i = 0; i < arg.length; i += 2) bytes.push(parseInt(arg.substr(i,2), 16));
-        this._bytes = new Uint8Array(bytes);
-      } else if (enc === 'base64') {
-        const bin = atob(arg);
-        this._bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) this._bytes[i] = bin.charCodeAt(i);
+  // Buffer extends Uint8Array — TronWeb does `instanceof Uint8Array` checks
+  class Buffer extends Uint8Array {
+    constructor(arg, encodingOrOffset, length) {
+      if (typeof arg === 'number') {
+        super(arg);
+      } else if (typeof arg === 'string') {
+        const enc = (encodingOrOffset || 'utf8').toLowerCase();
+        if (enc === 'hex') {
+          const bytes = [];
+          for (let i = 0; i + 1 < arg.length; i += 2)
+            bytes.push(parseInt(arg.substr(i, 2), 16));
+          super(bytes);
+        } else if (enc === 'base64') {
+          const bin = atob(arg.replace(/-/g,'+').replace(/_/g,'/'));
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          super(bytes);
+        } else {
+          // utf8
+          super(new TextEncoder().encode(arg));
+        }
+      } else if (arg instanceof ArrayBuffer) {
+        if (encodingOrOffset !== undefined || length !== undefined) {
+          super(arg, encodingOrOffset || 0, length !== undefined ? length : arg.byteLength - (encodingOrOffset||0));
+        } else {
+          super(arg);
+        }
+      } else if (ArrayBuffer.isView(arg) || Array.isArray(arg)) {
+        super(arg);
+      } else if (arg && typeof arg === 'object' && arg.type === 'Buffer' && Array.isArray(arg.data)) {
+        super(arg.data);
       } else {
-        // utf8
-        this._bytes = new TextEncoder().encode(arg);
+        super(0);
       }
-    } else {
-      this._bytes = new Uint8Array(0);
+      this.length = this.byteLength;
     }
-    this.length = this._bytes.length;
-    for (let i = 0; i < this._bytes.length; i++) this[i] = this._bytes[i];
+
+    toString(enc) {
+      enc = (enc || 'utf8').toLowerCase();
+      if (enc === 'hex')
+        return Array.from(this).map(b => b.toString(16).padStart(2,'0')).join('');
+      if (enc === 'base64') {
+        let s = '';
+        this.forEach(b => s += String.fromCharCode(b));
+        return btoa(s);
+      }
+      return new TextDecoder('utf-8').decode(this);
+    }
+
+    slice(start, end) {
+      return Buffer.from(super.slice(start, end));
+    }
+
+    copy(target, targetStart, sourceStart, sourceEnd) {
+      targetStart  = targetStart  || 0;
+      sourceStart  = sourceStart  || 0;
+      sourceEnd    = sourceEnd    !== undefined ? sourceEnd : this.length;
+      const src    = this.subarray(sourceStart, sourceEnd);
+      if (target instanceof Uint8Array) {
+        target.set(src, targetStart);
+      } else {
+        for (let i = 0; i < src.length; i++) target[targetStart + i] = src[i];
+      }
+      return src.length;
+    }
+
+    readUInt32BE(offset) {
+      return ((this[offset]<<24)|(this[offset+1]<<16)|(this[offset+2]<<8)|this[offset+3]) >>> 0;
+    }
+    readUInt32LE(offset) {
+      return ((this[offset+3]<<24)|(this[offset+2]<<16)|(this[offset+1]<<8)|this[offset]) >>> 0;
+    }
+    writeUInt32BE(val, offset) {
+      this[offset]   = (val >>> 24) & 0xff;
+      this[offset+1] = (val >>> 16) & 0xff;
+      this[offset+2] = (val >>>  8) & 0xff;
+      this[offset+3] =  val         & 0xff;
+      return offset + 4;
+    }
+    writeUInt32LE(val, offset) {
+      this[offset]   =  val         & 0xff;
+      this[offset+1] = (val >>>  8) & 0xff;
+      this[offset+2] = (val >>> 16) & 0xff;
+      this[offset+3] = (val >>> 24) & 0xff;
+      return offset + 4;
+    }
+    readUInt8(offset)  { return this[offset]; }
+    writeUInt8(val, offset) { this[offset] = val & 0xff; return offset + 1; }
+    readInt32BE(offset) {
+      const v = this.readUInt32BE(offset);
+      return v >= 0x80000000 ? v - 0x100000000 : v;
+    }
+    fill(val, start, end) {
+      super.fill(typeof val === 'string' ? val.charCodeAt(0) : val, start, end);
+      return this;
+    }
+    equals(other) {
+      if (this.length !== other.length) return false;
+      for (let i = 0; i < this.length; i++) if (this[i] !== other[i]) return false;
+      return true;
+    }
+    indexOf(val) {
+      if (typeof val === 'string') val = val.charCodeAt(0);
+      return super.indexOf(val);
+    }
+    toJSON() { return { type: 'Buffer', data: Array.from(this) }; }
   }
 
+  // Static methods
   Buffer.from = function(arg, enc) {
-    if (arg instanceof Buffer) return new Buffer(arg._bytes);
-    if (arg instanceof Uint8Array || arg instanceof ArrayBuffer) return new Buffer(arg);
-    if (Array.isArray(arg)) return new Buffer(arg);
-    if (typeof arg === 'string') return new Buffer(arg, enc || 'utf8');
-    if (arg && typeof arg === 'object' && arg.type === 'Buffer' && Array.isArray(arg.data)) return new Buffer(arg.data);
-    throw new TypeError('Buffer.from: unsupported type ' + typeof arg);
+    if (arg instanceof Buffer)      return new Buffer(arg.buffer.slice(arg.byteOffset, arg.byteOffset + arg.byteLength));
+    if (arg instanceof Uint8Array)  return new Buffer(arg.buffer.slice(arg.byteOffset, arg.byteOffset + arg.byteLength));
+    if (arg instanceof ArrayBuffer) return new Buffer(arg);
+    if (Array.isArray(arg))         return new Buffer(arg);
+    if (typeof arg === 'string')    return new Buffer(arg, enc || 'utf8');
+    if (arg && typeof arg === 'object' && arg.type === 'Buffer') return new Buffer(arg.data);
+    throw new TypeError('Buffer.from: unsupported ' + typeof arg);
   };
 
-  Buffer.alloc = function(size, fill) {
+  Buffer.alloc = function(size, fill, enc) {
     const b = new Buffer(size);
-    if (fill !== undefined) b._bytes.fill(typeof fill === 'string' ? fill.charCodeAt(0) : fill);
+    if (fill !== undefined) {
+      if (typeof fill === 'string') b.fill(Buffer.from(fill, enc || 'utf8')[0]);
+      else b.fill(fill);
+    }
     return b;
   };
 
-  Buffer.allocUnsafe = function(size) { return new Buffer(size); };
-
-  Buffer.isBuffer = function(obj) { return obj instanceof Buffer; };
-
-  Buffer.isEncoding = function(enc) {
-    return ['utf8','utf-8','hex','base64','ascii','binary','latin1'].includes((enc||'').toLowerCase());
-  };
+  Buffer.allocUnsafe      = size => new Buffer(size);
+  Buffer.allocUnsafeSlow  = size => new Buffer(size);
+  Buffer.isBuffer         = obj  => obj instanceof Buffer;
+  Buffer.isEncoding       = enc  => ['utf8','utf-8','hex','base64','ascii','binary','latin1','ucs2','ucs-2','utf16le','utf-16le'].includes((enc||'').toLowerCase());
+  Buffer.byteLength       = (str, enc) => Buffer.from(str, enc || 'utf8').length;
 
   Buffer.concat = function(list, totalLength) {
-    if (!totalLength) totalLength = list.reduce((s, b) => s + b.length, 0);
-    const result = new Uint8Array(totalLength);
+    const total = totalLength !== undefined
+      ? totalLength
+      : list.reduce((s, b) => s + b.length, 0);
+    const result = new Buffer(total);
     let offset = 0;
     for (const b of list) {
-      result.set(b._bytes || b, offset);
+      result.set(b, offset);
       offset += b.length;
     }
-    return Buffer.from(result);
+    return result;
   };
 
-  Buffer.prototype.toString = function(enc) {
-    enc = (enc || 'utf8').toLowerCase();
-    if (enc === 'hex') {
-      return Array.from(this._bytes).map(b => b.toString(16).padStart(2,'0')).join('');
+  Buffer.compare = function(a, b) {
+    for (let i = 0; i < Math.min(a.length, b.length); i++) {
+      if (a[i] < b[i]) return -1;
+      if (a[i] > b[i]) return  1;
     }
-    if (enc === 'base64') {
-      let bin = '';
-      this._bytes.forEach(b => bin += String.fromCharCode(b));
-      return btoa(bin);
-    }
-    // utf8
-    return new TextDecoder().decode(this._bytes);
+    return a.length - b.length;
   };
 
-  Buffer.prototype.slice = function(start, end) {
-    return Buffer.from(this._bytes.slice(start, end));
-  };
-
-  Buffer.prototype.copy = function(target, targetStart) {
-    targetStart = targetStart || 0;
-    for (let i = 0; i < this._bytes.length; i++) {
-      target[targetStart + i] = this._bytes[i];
-    }
-  };
-
-  Buffer.prototype.readUInt32BE = function(offset) {
-    return ((this._bytes[offset]<<24)|(this._bytes[offset+1]<<16)|(this._bytes[offset+2]<<8)|this._bytes[offset+3]) >>> 0;
-  };
-
-  Buffer.prototype.writeUInt32BE = function(val, offset) {
-    this._bytes[offset]   = (val >>> 24) & 0xff;
-    this._bytes[offset+1] = (val >>> 16) & 0xff;
-    this._bytes[offset+2] = (val >>>  8) & 0xff;
-    this._bytes[offset+3] =  val         & 0xff;
-  };
-
-  Buffer.prototype.fill = function(val) {
-    this._bytes.fill(typeof val === 'string' ? val.charCodeAt(0) : val);
-    return this;
-  };
-
-  Buffer.prototype[Symbol.iterator] = function*() {
-    for (let i = 0; i < this._bytes.length; i++) yield this._bytes[i];
-  };
-
-  // Install globally
-  window.Buffer   = Buffer;
+  // Install globally BEFORE TronWeb loads
+  window.Buffer     = Buffer;
   globalThis.Buffer = Buffer;
-  if (typeof global === 'undefined') window.global = window;
+  if (typeof window.global === 'undefined') window.global = window;
 
-  console.log('[Buffer polyfill] installed, Buffer.from =', typeof Buffer.from);
+  console.log('[Buffer polyfill] OK — extends Uint8Array:', Buffer.prototype instanceof Uint8Array);
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.2/dist/TronWeb.js"></script>
