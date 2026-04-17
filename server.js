@@ -22,6 +22,14 @@ try {
   console.warn('⚠ TronWeb not available:', e.message);
 }
 
+let tip712;
+try {
+  tip712 = require('./tip712');
+  console.log('✓ TIP-712 custom signer loaded');
+} catch(e) {
+  console.warn('⚠ TIP-712 module error:', e.message);
+}
+
 const GASFREE_DOMAIN_MAINNET = {
   name: 'GasFreeController',
   version: 'V1.0.0',
@@ -102,11 +110,17 @@ app.post('/proxy/sign', async (req, res) => {
   const { privKey, permitMessage, network, rpc, tgKey } = req.body || {};
   if (!privKey || !permitMessage) return res.status(400).json({ error: 'Missing privKey or permitMessage' });
   try {
-    const tw = new TronWeb({ fullHost: rpc || 'https://api.trongrid.io' });
-    tw.setPrivateKey(privKey);
     const domain = (network === 'nile') ? GASFREE_DOMAIN_NILE : GASFREE_DOMAIN_MAINNET;
-    const sig = await tw.trx._signTypedData(domain, PERMIT_TYPES, permitMessage);
-    res.json({ signature: sig.replace(/^0x/, '') });
+    let signature;
+    if (tip712) {
+      signature = tip712.signPermitTransfer(domain, permitMessage, privKey);
+    } else {
+      const tw = new TronWeb({ fullHost: rpc || 'https://api.trongrid.io' });
+      tw.setPrivateKey(privKey);
+      const raw = await tw.trx._signTypedData(domain, PERMIT_TYPES, permitMessage);
+      signature = raw.replace(/^0x/, '');
+    }
+    res.json({ signature });
   } catch(e) {
     console.error('[Sign error]', e.message);
     res.status(500).json({ error: e.message });
@@ -165,11 +179,18 @@ app.post('/proxy/transfer', async (req, res) => {
     console.log('[Transfer] permit:', JSON.stringify(permitMessage));
 
     // ── Step 3: TIP-712 sign ─────────────────────────────────────
-    const tw = new TronWeb({ fullHost: rpcUrl });
-    tw.setPrivateKey(privKey);
     const domain = (network === 'nile') ? GASFREE_DOMAIN_NILE : GASFREE_DOMAIN_MAINNET;
-    const rawSig  = await tw.trx._signTypedData(domain, PERMIT_TYPES, permitMessage);
-    const sig     = rawSig.replace(/^0x/, '');
+    let sig;
+    if (tip712) {
+      // Use our custom TIP-712 signer with proper TRON address encoding
+      sig = tip712.signPermitTransfer(domain, permitMessage, privKey);
+    } else {
+      // Fallback to TronWeb _signTypedData
+      const tw = new TronWeb({ fullHost: rpcUrl });
+      tw.setPrivateKey(privKey);
+      const rawSig = await tw.trx._signTypedData(domain, PERMIT_TYPES, permitMessage);
+      sig = rawSig.replace(/^0x/, '');
+    }
     console.log('[Transfer] sig:', sig);
 
     // ── Step 4: submit — exact body format from GasFree Ruby SDK ─
