@@ -108,6 +108,11 @@ function hmacB64(secret, message) {
   return crypto.createHmac('sha256', secret).update(message).digest('base64');
 }
 
+// Build GasFree HMAC message string — format: "METHOD PATH TIMESTAMP" (with spaces)
+function gfMessage(method, path, ts) {
+  return `${method.toUpperCase()} ${path} ${ts}`;
+}
+
 // ─────────────────────────────────────────────────────────────────
 // /proxy/sign  — TIP-712 signing only
 // Body: { privKey, permitMessage, network, rpc?, tgKey? }
@@ -205,35 +210,35 @@ app.post('/proxy/transfer', async (req, res) => {
       console.log(`[Transfer] domain=${domain.verifyingContract} sig=${sig.substring(0,16)}...`);
 
       // Try multiple body formats
-      const bodies = [
-        // Format A: value/maxFee strings, deadline number (Ruby SDK style)
-        { token:usdtAddr, serviceProvider:provider, user:fromAddr, receiver:toAddr,
-          value:String(valueInt), maxFee:String(maxFeeInt), deadline:deadline,
-          version:1, nonce:nonce, sig },
-        // Format B: all strings
-        { token:usdtAddr, serviceProvider:provider, user:fromAddr, receiver:toAddr,
-          value:String(valueInt), maxFee:String(maxFeeInt), deadline:String(deadline),
-          version:String(1), nonce:String(nonce), sig },
-        // Format C: all numbers
-        { token:usdtAddr, serviceProvider:provider, user:fromAddr, receiver:toAddr,
-          value:valueInt, maxFee:maxFeeInt, deadline, version:1, nonce, sig },
-        // Format D: signature field name instead of sig
-        { token:usdtAddr, serviceProvider:provider, user:fromAddr, receiver:toAddr,
-          value:String(valueInt), maxFee:String(maxFeeInt), deadline,
-          version:1, nonce, signature: sig },
-      ];
+      // Canonical body — all strings for value/maxFee/deadline/nonce, sig field
+      const body = {
+        token:           usdtAddr,
+        serviceProvider: provider,
+        user:            fromAddr,
+        receiver:        toAddr,
+        value:           String(valueInt),
+        maxFee:          String(maxFeeInt),
+        deadline:        String(deadline),
+        version:         1,
+        nonce:           parseInt(nonce),
+        sig:             sig,
+      };
 
-      for (let i = 0; i < bodies.length; i++) {
-        console.log(`[Transfer] trying format ${i+1}:`, JSON.stringify(bodies[i]));
+      // Try both known endpoints
+      const endpoints = ['/api/v1/gasfree/submit', '/api/v1/transfer'];
+
+      for (const ep of endpoints) {
+        console.log(`[Transfer] trying ${ep}:`, JSON.stringify(body));
         try {
-          const result = await gfApiPost(gfBase, '/api/v1/transfer', apiKey, apiSecret, bodies[i]);
-          console.log(`[Transfer] format ${i+1} result:`, JSON.stringify(result));
+          const result = await gfApiPost(gfBase, ep, apiKey, apiSecret, body);
+          console.log(`[Transfer] ${ep} result:`, JSON.stringify(result));
           lastResult = result;
           if (!result.code || result.code === 200) {
             return res.json(result);
           }
         } catch(e) {
-          console.warn(`[Transfer] format ${i+1} error:`, e.message);
+          console.warn(`[Transfer] ${ep} error:`, e.message);
+          lastResult = { code: 500, message: e.message };
         }
       }
     }
@@ -248,10 +253,14 @@ app.post('/proxy/transfer', async (req, res) => {
 
 // ── GasFree API helpers (server-side) ─────────────────────────────
 async function gfApiGet(base, path, apiKey, apiSecret) {
-  const ts  = Math.floor(Date.now() / 1000);
-  const sig = hmacB64(apiSecret, `GET${base.replace(/https?:\/\/[^/]+/, '')}${path}${ts}`);
+  const ts         = Math.floor(Date.now() / 1000);
+  const basePrefix = new URL(base).pathname.replace(/\/$/, ''); // "/tron"
+  const fullPath   = basePrefix + path;
+  const sig        = hmacB64(apiSecret, gfMessage('GET', fullPath, ts));
+  console.log(`[GF] GET sign: "GET ${fullPath} ${ts}"`);
   const result = await rawRequest(base + path, 'GET', {
-    'timestamp':     String(ts),
+    'timestamp':   String(ts),
+    'x-timestamp': String(ts),
     'authorization': `ApiKey ${apiKey}:${sig}`,
   }, null);
   const p = safeParse(result.rawBody);
@@ -260,13 +269,14 @@ async function gfApiGet(base, path, apiKey, apiSecret) {
 }
 
 async function gfApiPost(base, path, apiKey, apiSecret, body) {
-  const ts  = Math.floor(Date.now() / 1000);
-  // variant2 path = /tron + path (what worked for GET)
-  const basePrefix = new URL(base).pathname.replace(/\/$/, '');
-  const signPath   = basePrefix + path;
-  const sig = hmacB64(apiSecret, `POST${signPath}${ts}`);
+  const ts         = Math.floor(Date.now() / 1000);
+  const basePrefix = new URL(base).pathname.replace(/\/$/, ''); // "/tron"
+  const fullPath   = basePrefix + path;
+  const sig        = hmacB64(apiSecret, gfMessage('POST', fullPath, ts));
+  console.log(`[GF] POST sign: "POST ${fullPath} ${ts}"`);
   const result = await rawRequest(base + path, 'POST', {
-    'timestamp':     String(ts),
+    'timestamp':   String(ts),
+    'x-timestamp': String(ts),
     'authorization': `ApiKey ${apiKey}:${sig}`,
   }, JSON.stringify(body));
   console.log(`[GF POST] HTTP ${result.status}: ${result.rawBody}`);
@@ -292,21 +302,24 @@ app.post('/proxy/gasfree', async (req, res) => {
   const bodyStr    = body ? JSON.stringify(body) : null;
   const basePrefix = new URL(targetBase).pathname.replace(/\/$/, '');
 
-  // Try 3 signature path variants
-  const signPaths = [
-    gfPath,
-    basePrefix + gfPath,
-    gfPath.replace('/api', ''),
+  // Try signature variants: with and without spaces, with and without base prefix
+  const signMessages = [
+    gfMessage(m, basePrefix + gfPath, ts),   // "GET /tron/api/v1/... ts" ← correct per working code
+    gfMessage(m, gfPath, ts),                // "GET /api/v1/... ts"
+    `${m}${basePrefix}${gfPath}${ts}`,       // "GET/tron/api/v1/...ts" no spaces
+    `${m}${gfPath}${ts}`,                    // "GET/api/v1/...ts" no spaces
   ];
 
   console.log(`\n[GF] ${m} ${targetUrl}  ts=${ts}`);
+  console.log(`[GF] trying messages:`, signMessages);
 
   let lastResult = { status: 500, rawBody: 'No attempt' };
 
-  for (let i = 0; i < signPaths.length; i++) {
-    const signature = hmacB64(apiSecret, `${m}${signPaths[i]}${ts}`);
+  for (let i = 0; i < signMessages.length; i++) {
+    const signature = hmacB64(apiSecret, signMessages[i]);
     const headers = {
       'timestamp':     String(ts),
+      'x-timestamp':   String(ts),
       'authorization': `ApiKey ${apiKey}:${signature}`,
     };
     try {
