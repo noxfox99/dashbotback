@@ -3,6 +3,7 @@ const https   = require('https');
 const http    = require('http');
 const path    = require('path');
 const crypto  = require('crypto');
+const fs      = require('fs');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -416,6 +417,80 @@ app.post('/proxy/trongrid', async (req, res) => {
   } catch(e) {
     return res.status(500).json({ error: e.message });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// PERSISTENT STORAGE — data.json on server
+// Stores: wallets (with private keys), config per user role
+// ─────────────────────────────────────────────────────────────────
+const DATA_FILE = path.join(__dirname, 'data.json');
+
+function readData() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    }
+  } catch(e) {
+    console.error('[Storage] read error:', e.message);
+  }
+  return { wallets: {}, config: {} };
+}
+
+function writeData(data) {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+    return true;
+  } catch(e) {
+    console.error('[Storage] write error:', e.message);
+    return false;
+  }
+}
+
+// GET /storage — load all data for current user role
+app.get('/storage', (req, res) => {
+  const data = readData();
+  res.json(data);
+});
+
+// POST /storage — save all data
+app.post('/storage', (req, res) => {
+  const incoming = req.body || {};
+  if (!incoming.wallets && !incoming.config) {
+    return res.status(400).json({ error: 'Missing wallets or config' });
+  }
+  const current = readData();
+  // Merge: incoming wallets override existing per project
+  if (incoming.wallets) {
+    Object.assign(current.wallets, incoming.wallets);
+  }
+  if (incoming.config) {
+    Object.assign(current.config, incoming.config);
+  }
+  const ok = writeData(current);
+  res.json({ ok, ts: Date.now() });
+});
+
+// PATCH /storage/wallets/:projId — save wallets for one project
+app.patch('/storage/wallets/:projId', (req, res) => {
+  const { projId } = req.params;
+  const walletData = req.body;
+  if (!walletData) return res.status(400).json({ error: 'Missing body' });
+  const data = readData();
+  data.wallets[projId] = walletData;
+  const ok = writeData(data);
+  console.log(`[Storage] saved wallets for ${projId}`);
+  res.json({ ok, ts: Date.now() });
+});
+
+// PATCH /storage/config — save config
+app.patch('/storage/config', (req, res) => {
+  const cfg = req.body;
+  if (!cfg) return res.status(400).json({ error: 'Missing body' });
+  const data = readData();
+  data.config = { ...data.config, ...cfg };
+  const ok = writeData(data);
+  console.log('[Storage] config saved');
+  res.json({ ok, ts: Date.now() });
 });
 
 // ─────────────────────────────────────────────────────────────────
