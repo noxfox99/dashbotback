@@ -759,42 +759,88 @@ function cfg() {
 
 function saveConfig() {
   const c = cfg();
+  // Save to localStorage
   try { localStorage.setItem('tgf2_cfg', JSON.stringify(c)); } catch(e){}
-  toast('Настройки сохранены ✓', 'success');
+  // Save to server
+  fetch('/storage/config', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(c)
+  }).then(() => toast('Настройки сохранены ✓', 'success'))
+    .catch(e => { console.warn('[Storage] config save error:', e); toast('Настройки сохранены (локально)', 'success'); });
 }
 
-function loadConfigFromStorage() {
+async function loadConfigFromStorage() {
+  // Load from server first, fallback to localStorage
+  let serverData = { wallets: {}, config: {} };
   try {
-    const c = JSON.parse(localStorage.getItem('tgf2_cfg') || '{}');
-    if(c.gfKey)    document.getElementById('cfg-gf-key').value    = c.gfKey;
-    if(c.gfSecret) document.getElementById('cfg-gf-secret').value = c.gfSecret;
-    if(c.gfUrl)    document.getElementById('cfg-gf-url').value    = c.gfUrl;
-    if(c.provider) document.getElementById('cfg-provider').value  = c.provider;
-    if(c.maxfee)   document.getElementById('cfg-maxfee').value    = c.maxfee;
-    if(c.tgKey)    document.getElementById('cfg-tg-key').value    = c.tgKey;
-    if(c.rpc)      document.getElementById('cfg-rpc').value       = c.rpc;
-    if(c.usdt)     document.getElementById('cfg-usdt').value      = c.usdt;
-    if(c.net)      document.getElementById('cfg-net').value       = c.net;
-    onNetChange();
-  } catch(e){}
+    const res = await fetch('/storage');
+    if (res.ok) serverData = await res.json();
+    console.log('[Storage] loaded from server');
+  } catch(e) {
+    console.warn('[Storage] server load failed, using localStorage:', e.message);
+  }
 
-  // load wallets
-  try {
-    const saved = JSON.parse(localStorage.getItem('tgf2_wallets') || '{}');
-    PROJECTS.forEach(p => {
-      if(saved[p.id]) {
-        DB[p.id].active   = saved[p.id].active   || [];
-        DB[p.id].archived = saved[p.id].archived || [];
-        DB[p.id].txs      = saved[p.id].txs      || [];
-      }
-    });
-  } catch(e){}
+  // Apply config
+  const c = serverData.config && Object.keys(serverData.config).length
+    ? serverData.config
+    : JSON.parse(localStorage.getItem('tgf2_cfg') || '{}');
+
+  if(c.gfKey)    document.getElementById('cfg-gf-key').value    = c.gfKey;
+  if(c.gfSecret) document.getElementById('cfg-gf-secret').value = c.gfSecret;
+  if(c.gfUrl)    document.getElementById('cfg-gf-url').value    = c.gfUrl;
+  if(c.provider) document.getElementById('cfg-provider').value  = c.provider;
+  if(c.maxfee)   document.getElementById('cfg-maxfee').value    = c.maxfee;
+  if(c.tgKey)    document.getElementById('cfg-tg-key').value    = c.tgKey;
+  if(c.rpc)      document.getElementById('cfg-rpc').value       = c.rpc;
+  if(c.usdt)     document.getElementById('cfg-usdt').value      = c.usdt;
+  if(c.net)      document.getElementById('cfg-net').value       = c.net;
+  onNetChange();
+
+  // Apply wallets — server takes priority over localStorage
+  const savedWallets = serverData.wallets && Object.keys(serverData.wallets).length
+    ? serverData.wallets
+    : JSON.parse(localStorage.getItem('tgf2_wallets') || '{}');
+
+  PROJECTS.forEach(p => {
+    if (savedWallets[p.id]) {
+      DB[p.id].active   = savedWallets[p.id].active   || [];
+      DB[p.id].archived = savedWallets[p.id].archived || [];
+      DB[p.id].txs      = savedWallets[p.id].txs      || [];
+    }
+  });
+
+  // Re-render after loading
+  renderProjTabs();
+  renderAllProjPanels();
+  populateWithdrawSelect();
+  updateGlobalStats();
 }
 
-function saveWallets() {
-  const data = {};
-  PROJECTS.forEach(p => { data[p.id] = DB[p.id]; });
-  try { localStorage.setItem('tgf2_wallets', JSON.stringify(data)); } catch(e){}
+function saveWallets(projId) {
+  // Save to server — if projId given, save just that project
+  if (projId) {
+    fetch('/storage/wallets/' + projId, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(DB[projId])
+    }).catch(e => console.warn('[Storage] save wallets error:', e.message));
+  } else {
+    // Save all
+    const data = {};
+    PROJECTS.forEach(p => { data[p.id] = DB[p.id]; });
+    fetch('/storage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wallets: data })
+    }).catch(e => console.warn('[Storage] save all error:', e.message));
+  }
+  // Also keep localStorage as backup
+  try {
+    const data = {};
+    PROJECTS.forEach(p => { data[p.id] = DB[p.id]; });
+    localStorage.setItem('tgf2_wallets', JSON.stringify(data));
+  } catch(e) {}
 }
 
 function clearAllConfig() {
@@ -1423,7 +1469,7 @@ function archiveWallet(wid, projId) {
   const w = d.active.splice(idx,1)[0];
   w.archivedAt = new Date().toISOString().split('T')[0];
   d.archived.push(w);
-  saveWallets(); rerenderProj(projId); updateGlobalStats();
+  saveWallets(projId); rerenderProj(projId); updateGlobalStats();
   populateWithdrawSelect();
   toast('Кошелёк архивирован', 'success');
 }
@@ -1435,7 +1481,7 @@ function unarchiveWallet(wid, projId) {
   const w = d.archived.splice(idx,1)[0];
   delete w.archivedAt;
   d.active.push(w);
-  saveWallets(); rerenderProj(projId); updateGlobalStats();
+  saveWallets(projId); rerenderProj(projId); updateGlobalStats();
   populateWithdrawSelect();
   toast('Кошелёк восстановлен', 'success');
 }
@@ -1675,13 +1721,10 @@ function toast(msg,type='info') {
 // ═══════════════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════════════
-window.addEventListener('DOMContentLoaded', () => {
-  loadConfigFromStorage();
+window.addEventListener('DOMContentLoaded', async () => {
+  // loadConfigFromStorage is async — it loads from server then re-renders
+  await loadConfigFromStorage();
   checkSession();
-  renderProjTabs();
-  renderAllProjPanels();
-  populateWithdrawSelect();
-  updateGlobalStats();
 });
 
 // ═══════════════════════════════════════════════════════════════
