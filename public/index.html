@@ -1223,8 +1223,10 @@ async function fetchGasFreeInfo(wallet, projId, showInModal = false) {
     if(showInModal) {
       const box = document.getElementById('gen-gf-info');
       document.getElementById('gen-gf-content').innerHTML = `
-        <div><span style="color:#334d66">GasFree адрес:</span> <span style="font-family:\'Space Mono\',monospace;color:#00e5ff;font-size:10px">${escHtml(wallet.gasFreeAddr||'—')}</span></div>
-        <div><span style="color:#334d66">Nonce:</span> <span style="font-family:\'Space Mono\',monospace">${wallet.nonce}</span></div>
+        <div><span style="color:#334d66">GasFree адрес (для пополнения):</span></div>
+        <div style="font-family:'Space Mono',monospace;color:#00e5ff;font-size:10px;word-break:break-all;margin-top:3px">${escHtml(wallet.gasFreeAddr||'—')}</div>
+        <div style="font-size:10px;color:#ffd600;margin-top:6px">⚠ Отправляйте USDT на GasFree адрес, не на EOA адрес выше</div>
+        <div><span style="color:#334d66">Nonce:</span> <span style="font-family:'Space Mono',monospace">${wallet.nonce}</span></div>
         <div><span style="color:#334d66">Статус:</span> <span class="badge badge-green">⚡ GasFree активен</span></div>
       `;
       box.style.display = 'flex';
@@ -1258,7 +1260,8 @@ async function refreshAllBalances() {
       const balEl = document.getElementById(`bal-${w.id}`);
       if(balEl) { balEl.textContent = '…'; balEl.className = 'wallet-balance loading'; }
 
-      const { usdt, trx } = await fetchUSDTBalance(w.addr);
+      const balAddr = w.gasFreeAddr || w.addr; // prefer GasFree address
+      const { usdt, trx } = await fetchUSDTBalance(balAddr);
       w.balance = usdt;
       w.trx = trx;
       ok++;
@@ -1288,7 +1291,8 @@ async function refreshSingleBalance(wid, projId) {
   const balEl = document.getElementById(`bal-${wid}`);
   if(balEl) { balEl.textContent = '…'; balEl.className = 'wallet-balance loading'; }
   try {
-    const { usdt, trx } = await fetchUSDTBalance(w.addr);
+    const balAddr = w.gasFreeAddr || w.addr;
+    const { usdt, trx } = await fetchUSDTBalance(balAddr);
     w.balance = usdt; w.trx = trx;
     saveWallets();
     if(balEl) { balEl.textContent = fmt(usdt)+' USDT'; balEl.className='wallet-balance'+(usdt===0?' zero':''); }
@@ -1596,8 +1600,15 @@ function renderWalletItem(w, projId, archived) {
         ${w.enrolled?'<span class="badge badge-green">⚡ GasFree</span>':'<span class="badge badge-gray">Не подключён</span>'}
         ${archived?'<span class="badge badge-gray">Архив</span>':''}
       </div>
+      <div style="font-size:9px;color:#334d66;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">EOA адрес</div>
       <div class="wallet-addr" onclick="copyRaw('${escHtml(w.addr)}')" title="Нажмите для копирования">${escHtml(w.addr)}</div>
-      ${w.gasFreeAddr?`<div style="font-size:9px;color:#334d66;margin-top:3px;font-family:\'Space Mono\',monospace">GF: ${escHtml(w.gasFreeAddr)}</div>`:''}
+      ${w.gasFreeAddr
+        ? `<div style="margin-top:7px">
+             <div style="font-size:9px;color:#00e676;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">▼ Адрес для пополнения USDT (GasFree)</div>
+             <div style="font-family:'Space Mono',monospace;font-size:10px;color:#00e5ff;word-break:break-all;cursor:pointer;padding:5px 8px;background:#0a1520;border-radius:4px;border:1px solid rgba(0,229,255,0.15)" onclick="copyRaw('${escHtml(w.gasFreeAddr)}')" title="Нажмите для копирования">${escHtml(w.gasFreeAddr)}</div>
+           </div>`
+        : `<div style="font-size:9px;color:#ff9100;margin-top:5px">⚠ Нажмите «⚡ GF статус» чтобы получить адрес для пополнения</div>`
+      }
       <div class="wallet-meta">
         <span class="wallet-tag">Создан: ${w.created}</span>
         ${archived?`<span class="wallet-tag">Архивирован: ${w.archivedAt||'—'}</span>`:`<span class="wallet-tag" id="trx-${w.id}">TRX: ${w.trx.toFixed(2)}</span>`}
