@@ -970,46 +970,31 @@ function deriveAddressFromKey(privKey) {
 // TIP-712 SIGNATURE
 // ═══════════════════════════════════════════════════════════════
 async function signPermitTransfer(privKey, permitMessage) {
-  if (typeof Buffer === 'undefined') {
-    throw new Error('Buffer не определён. Перезагрузите страницу (Ctrl+Shift+R).');
+  // TIP-712 signing is done SERVER-SIDE via /proxy/sign
+  // This avoids Buffer/crypto polyfill issues in browser
+  const c = cfg();
+  console.log('[Sign] Sending to server for TIP-712 signing...');
+  console.log('[Sign] message:', JSON.stringify(permitMessage));
+
+  const res = await fetch('/proxy/sign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      privKey,
+      permitMessage,
+      network: c.net,
+      rpc:     c.rpc,
+      tgKey:   c.tgKey,
+    })
+  });
+
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error('Ошибка подписи на сервере: ' + (data.error || res.status));
   }
 
-  const tw = getTronWeb(privKey);
-  const domain = cfg().net === 'nile' ? GASFREE_DOMAIN_NILE : GASFREE_DOMAIN_MAINNET;
-
-  // TronWeb _signTypedData for TRON TIP-712:
-  // - address fields: base58 TRON addresses (NOT hex, NOT 0x-prefixed)
-  // - uint256 fields: plain JS numbers or BigInt
-  // - verifyingContract in domain: base58 TRON address
-  const msgForSign = {
-    token:           permitMessage.token,           // base58
-    serviceProvider: permitMessage.serviceProvider, // base58
-    user:            permitMessage.user,            // base58
-    receiver:        permitMessage.receiver,        // base58
-    value:           permitMessage.value,           // number
-    maxFee:          permitMessage.maxFee,          // number
-    deadline:        permitMessage.deadline,        // number
-    version:         permitMessage.version,         // number
-    nonce:           permitMessage.nonce,           // number
-  };
-
-  console.log('[Sign] domain:', JSON.stringify(domain));
-  console.log('[Sign] message:', JSON.stringify(msgForSign));
-
-  let sig;
-  try {
-    sig = await tw.trx._signTypedData(domain, PERMIT_TYPES, msgForSign);
-    console.log('[Sign] raw sig:', sig);
-  } catch(e) {
-    console.error('[Sign] _signTypedData error:', e);
-    if (tw.trx.signTypedData) {
-      sig = await tw.trx.signTypedData(domain, PERMIT_TYPES, msgForSign, privKey);
-    } else {
-      throw new Error('Ошибка подписи TIP-712: ' + e.message);
-    }
-  }
-
-  return sig.replace(/^0x/, '');
+  console.log('[Sign] signature from server:', data.signature);
+  return data.signature;
 }
 
 // ═══════════════════════════════════════════════════════════════
