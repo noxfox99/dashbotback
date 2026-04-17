@@ -1272,115 +1272,34 @@ async function refreshTxHistory(wid, projId) {
 // ═══════════════════════════════════════════════════════════════
 async function buildAndSubmitTransfer(fromAddr, privKey, toAddr, amountUSDT, maxFeeUSDT) {
   const c = cfg();
-  if(!c.gfKey || !c.gfSecret) throw new Error('Укажите GasFree API Key и Secret в настройках');
-  if(!c.provider) throw new Error('Укажите адрес Service Provider в настройках');
+  if (!c.gfKey || !c.gfSecret) throw new Error('Укажите GasFree API Key и Secret в настройках');
+  if (!c.provider)              throw new Error('Укажите адрес Service Provider в настройках');
 
-  // Step 1: get GasFree account info to fetch nonce
-  const acctData = await getGasFreeAccountInfo(fromAddr);
-  const acct = acctData.data || acctData;
-  console.log('[Transfer] GasFree account info:', JSON.stringify(acct));
+  // Everything is done server-side: sign TIP-712 + submit to GasFree
+  // This avoids all Buffer/crypto browser issues
+  const res = await fetch('/proxy/transfer', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      privKey,
+      fromAddr,
+      toAddr,
+      amountUsdt:  amountUSDT,
+      maxFeeUsdt:  maxFeeUSDT || c.maxfee || 5,
+      apiKey:      c.gfKey,
+      apiSecret:   c.gfSecret,
+      baseUrl:     c.gfUrl,
+      provider:    c.provider,
+      usdt:        c.usdt,
+      network:     c.net,
+      rpc:         c.rpc,
+      tgKey:       c.tgKey,
+    })
+  });
 
-  // nonce is per-account, comes from GasFree
-  const nonce = (acct.nonce !== undefined && acct.nonce !== null) ? Number(acct.nonce) : 0;
-
-  // values must be integers (Sun/micro units), passed as numbers not strings
-  const valueInt   = Math.round(amountUSDT * 1e6);
-  const maxFeeInt  = Math.round(maxFeeUSDT * 1e6);
-  const deadline   = Math.floor(Date.now() / 1000) + 600;
-
-  // Step 2: build the TIP-712 permit message
-  // All numeric fields as numbers (not strings, not BigInt)
-  const message = {
-    token:           c.usdt,
-    serviceProvider: c.provider,
-    user:            fromAddr,
-    receiver:        toAddr,
-    value:           valueInt,
-    maxFee:          maxFeeInt,
-    deadline:        deadline,
-    version:         1,
-    nonce:           nonce,
-  };
-
-  console.log('[Transfer] Permit message:', JSON.stringify(message));
-
-  // Step 3: sign with TIP-712
-  const sig = await signPermitTransfer(privKey, message);
-  console.log('[Transfer] Signature:', sig);
-
-  // Step 4: submit to GasFree relay
-  // Try all known field name variants across different GasFree API versions
-
-  // Variant A: sig field (older docs)
-  const bodyA = {
-    token:           c.usdt,
-    serviceProvider: c.provider,
-    user:            fromAddr,
-    receiver:        toAddr,
-    value:           String(valueInt),
-    maxFee:          String(maxFeeInt),
-    deadline:        String(deadline),
-    version:         1,
-    nonce:           nonce,
-    sig:             sig,
-  };
-
-  // Variant B: signature field (newer docs)
-  const bodyB = { ...bodyA, signature: sig };
-  delete bodyB.sig;
-
-  // Variant C: numeric value/maxFee/deadline/nonce
-  const bodyC = {
-    token:           c.usdt,
-    serviceProvider: c.provider,
-    user:            fromAddr,
-    receiver:        toAddr,
-    value:           valueInt,
-    maxFee:          maxFeeInt,
-    deadline:        deadline,
-    version:         1,
-    nonce:           nonce,
-    sig:             sig,
-  };
-
-  // Variant D: numeric + signature field name
-  const bodyD = { ...bodyC, signature: sig };
-  delete bodyD.sig;
-
-  const attempts = [
-    { endpoint: '/transfer',        body: bodyA, label: 'A: /transfer sig=string' },
-    { endpoint: '/transfer',        body: bodyB, label: 'B: /transfer signature=string' },
-    { endpoint: '/transfer',        body: bodyC, label: 'C: /transfer sig=number' },
-    { endpoint: '/transfer',        body: bodyD, label: 'D: /transfer signature=number' },
-    { endpoint: '/transfer/submit', body: bodyA, label: 'E: /transfer/submit sig=string' },
-    { endpoint: '/transfer/submit', body: bodyB, label: 'F: /transfer/submit signature=string' },
-  ];
-
-  let lastResult;
-  for (const attempt of attempts) {
-    console.log(`[Transfer] Trying ${attempt.label}:`, JSON.stringify(attempt.body));
-    try {
-      const result = await gfPost(attempt.endpoint, attempt.body);
-      console.log(`[Transfer] ${attempt.label} response:`, JSON.stringify(result));
-      lastResult = result;
-
-      // Success — no code 500/400
-      if (!result || result.code === undefined || (result.code >= 200 && result.code < 300)) {
-        return result;
-      }
-      if (result.code !== 500 && result.code !== 400 && result.code !== 422) {
-        return result;
-      }
-      console.warn(`[Transfer] ${attempt.label} returned code ${result.code}, trying next...`);
-    } catch(e) {
-      console.warn(`[Transfer] ${attempt.label} threw:`, e.message);
-      lastResult = { code: 500, message: e.message };
-    }
-  }
-
-  // All failed — throw with last response
-  const msg = lastResult?.message || lastResult?.reason || JSON.stringify(lastResult);
-  throw new Error(`GasFree relay ошибка: ${msg}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
 }
 
 async function doGasFreeWithdraw() {
