@@ -252,37 +252,55 @@ app.post('/proxy/transfer', async (req, res) => {
 });
 
 // ── GasFree API helpers (server-side) ─────────────────────────────
-async function gfApiGet(base, path, apiKey, apiSecret) {
+// Build signature and make a GasFree request, trying multiple HMAC message formats
+async function gfRequest(base, path, method, apiKey, apiSecret, body) {
   const ts         = Math.floor(Date.now() / 1000);
   const basePrefix = new URL(base).pathname.replace(/\/$/, ''); // "/tron"
-  const fullPath   = basePrefix + path;
-  const sig        = hmacB64(apiSecret, gfMessage('GET', fullPath, ts));
-  console.log(`[GF] GET sign: "GET ${fullPath} ${ts}"`);
-  const result = await rawRequest(base + path, 'GET', {
-    'timestamp':   String(ts),
-    'x-timestamp': String(ts),
-    'authorization': `ApiKey ${apiKey}:${sig}`,
-  }, null);
-  const p = safeParse(result.rawBody);
-  if (!p.ok) throw new Error('GasFree non-JSON: ' + result.rawBody);
-  return p.data;
+  const m          = method.toUpperCase();
+
+  // All known HMAC message formats — try each until one returns non-401
+  const signFormats = [
+    `${m} ${path} ${ts}`,                   // "GET /api/v1/... ts"  ← per NestJS example
+    `${m} ${basePrefix}${path} ${ts}`,      // "GET /tron/api/v1/... ts"
+    `${m}${basePrefix}${path}${ts}`,        // "GET/tron/api/v1/...ts" no spaces
+    `${m}${path}${ts}`,                     // "GET/api/v1/...ts" no spaces
+  ];
+
+  const bodyStr = body ? JSON.stringify(body) : null;
+  let lastResult = { status: 500, rawBody: 'no attempt' };
+
+  for (const msg of signFormats) {
+    const sig = hmacB64(apiSecret, msg);
+    console.log(`[GF] ${m} trying: "${msg.substring(0, 60)}"`);
+    try {
+      const result = await rawRequest(base + path, m, {
+        'timestamp':     String(ts),
+        'x-timestamp':   String(ts),
+        'authorization': `ApiKey ${apiKey}:${sig}`,
+      }, bodyStr);
+      lastResult = result;
+      console.log(`[GF] HTTP ${result.status}: ${result.rawBody.substring(0, 200)}`);
+      // Accept any non-auth-error response
+      if (result.status !== 401 && result.status !== 403) {
+        const p = safeParse(result.rawBody);
+        if (p.ok) return p.data;
+        throw new Error('GasFree non-JSON: ' + result.rawBody);
+      }
+    } catch(e) {
+      if (e.message.startsWith('GasFree non-JSON')) throw e;
+      lastResult = { status: 500, rawBody: e.message };
+    }
+  }
+
+  throw new Error('GasFree auth failed after all variants: ' + lastResult.rawBody);
+}
+
+async function gfApiGet(base, path, apiKey, apiSecret) {
+  return gfRequest(base, path, 'GET', apiKey, apiSecret, null);
 }
 
 async function gfApiPost(base, path, apiKey, apiSecret, body) {
-  const ts         = Math.floor(Date.now() / 1000);
-  const basePrefix = new URL(base).pathname.replace(/\/$/, ''); // "/tron"
-  const fullPath   = basePrefix + path;
-  const sig        = hmacB64(apiSecret, gfMessage('POST', fullPath, ts));
-  console.log(`[GF] POST sign: "POST ${fullPath} ${ts}"`);
-  const result = await rawRequest(base + path, 'POST', {
-    'timestamp':   String(ts),
-    'x-timestamp': String(ts),
-    'authorization': `ApiKey ${apiKey}:${sig}`,
-  }, JSON.stringify(body));
-  console.log(`[GF POST] HTTP ${result.status}: ${result.rawBody}`);
-  const p = safeParse(result.rawBody);
-  if (!p.ok) throw new Error('GasFree non-JSON: ' + result.rawBody);
-  return p.data;
+  return gfRequest(base, path, 'POST', apiKey, apiSecret, body);
 }
 
 // ─────────────────────────────────────────────────────────────────
