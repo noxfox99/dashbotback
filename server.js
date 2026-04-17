@@ -30,11 +30,18 @@ try {
   console.warn('⚠ TIP-712 module error:', e.message);
 }
 
+// Two known mainnet verifyingContract addresses — server will try both
 const GASFREE_DOMAIN_MAINNET = {
   name: 'GasFreeController',
   version: 'V1.0.0',
   chainId: 728126428,          // 0x2b6653dc — TRON Mainnet
-  verifyingContract: 'THQGuFzL87ZqhxkgqYEryRAd7gqFqL5rdc'
+  verifyingContract: 'THQGuFzL87ZqhxkgqYEryRAd7gqFqL5rdc'  // from official docs
+};
+const GASFREE_DOMAIN_MAINNET_ALT = {
+  name: 'GasFreeController',
+  version: 'V1.0.0',
+  chainId: 728126428,
+  verifyingContract: 'TFFAMQLZybALaLb4uxHA9RBE7pxhUAjF3U'  // from Ruby SDK
 };
 const GASFREE_DOMAIN_NILE = {
   name: 'GasFreeController',
@@ -179,46 +186,60 @@ app.post('/proxy/transfer', async (req, res) => {
     console.log('[Transfer] permit:', JSON.stringify(permitMessage));
 
     // ── Step 3: TIP-712 sign ─────────────────────────────────────
-    const domain = (network === 'nile') ? GASFREE_DOMAIN_NILE : GASFREE_DOMAIN_MAINNET;
-    let sig;
-    if (tip712) {
-      // Use our custom TIP-712 signer with proper TRON address encoding
-      sig = tip712.signPermitTransfer(domain, permitMessage, privKey);
-    } else {
-      // Fallback to TronWeb _signTypedData
-      const tw = new TronWeb({ fullHost: rpcUrl });
-      tw.setPrivateKey(privKey);
-      const rawSig = await tw.trx._signTypedData(domain, PERMIT_TYPES, permitMessage);
-      sig = rawSig.replace(/^0x/, '');
+    // Try both known mainnet verifyingContracts + all body format variants
+    const domains = network === 'nile'
+      ? [GASFREE_DOMAIN_NILE]
+      : [GASFREE_DOMAIN_MAINNET, GASFREE_DOMAIN_MAINNET_ALT];
+
+    let lastResult;
+    for (const domain of domains) {
+      let sig;
+      if (tip712) {
+        sig = tip712.signPermitTransfer(domain, permitMessage, privKey);
+      } else {
+        const tw = new TronWeb({ fullHost: rpcUrl });
+        tw.setPrivateKey(privKey);
+        const rawSig = await tw.trx._signTypedData(domain, PERMIT_TYPES, permitMessage);
+        sig = rawSig.replace(/^0x/, '');
+      }
+      console.log(`[Transfer] domain=${domain.verifyingContract} sig=${sig.substring(0,16)}...`);
+
+      // Try multiple body formats
+      const bodies = [
+        // Format A: value/maxFee strings, deadline number (Ruby SDK style)
+        { token:usdtAddr, serviceProvider:provider, user:fromAddr, receiver:toAddr,
+          value:String(valueInt), maxFee:String(maxFeeInt), deadline:deadline,
+          version:1, nonce:nonce, sig },
+        // Format B: all strings
+        { token:usdtAddr, serviceProvider:provider, user:fromAddr, receiver:toAddr,
+          value:String(valueInt), maxFee:String(maxFeeInt), deadline:String(deadline),
+          version:String(1), nonce:String(nonce), sig },
+        // Format C: all numbers
+        { token:usdtAddr, serviceProvider:provider, user:fromAddr, receiver:toAddr,
+          value:valueInt, maxFee:maxFeeInt, deadline, version:1, nonce, sig },
+        // Format D: signature field name instead of sig
+        { token:usdtAddr, serviceProvider:provider, user:fromAddr, receiver:toAddr,
+          value:String(valueInt), maxFee:String(maxFeeInt), deadline,
+          version:1, nonce, signature: sig },
+      ];
+
+      for (let i = 0; i < bodies.length; i++) {
+        console.log(`[Transfer] trying format ${i+1}:`, JSON.stringify(bodies[i]));
+        try {
+          const result = await gfApiPost(gfBase, '/api/v1/transfer', apiKey, apiSecret, bodies[i]);
+          console.log(`[Transfer] format ${i+1} result:`, JSON.stringify(result));
+          lastResult = result;
+          if (!result.code || result.code === 200) {
+            return res.json(result);
+          }
+        } catch(e) {
+          console.warn(`[Transfer] format ${i+1} error:`, e.message);
+        }
+      }
     }
-    console.log('[Transfer] sig:', sig);
 
-    // ── Step 4: submit — exact body format from GasFree Ruby SDK ─
-    // value/maxFee = string, deadline = number, nonce = number, sig = string
-    const body = {
-      token:           usdtAddr,
-      serviceProvider: provider,
-      user:            fromAddr,
-      receiver:        toAddr,
-      value:           String(valueInt),
-      maxFee:          String(maxFeeInt),
-      deadline:        deadline,
-      version:         1,
-      nonce:           nonce,
-      sig:             sig,
-    };
-    console.log('[Transfer] submit body:', JSON.stringify(body));
-
-    const result = await gfApiPost(gfBase, '/api/v1/transfer', apiKey, apiSecret, body);
-    console.log('[Transfer] result:', JSON.stringify(result));
-
-    if (result.code && result.code !== 200) {
-      return res.status(200).json({
-        error: result.message || result.reason || JSON.stringify(result),
-        raw:   result,
-      });
-    }
-    res.json(result);
+    const msg = lastResult?.message || lastResult?.reason || JSON.stringify(lastResult);
+    return res.status(200).json({ error: `GasFree: ${msg}`, raw: lastResult });
   } catch(e) {
     console.error('[Transfer error]', e.message, e.stack);
     res.status(500).json({ error: e.message });
@@ -234,7 +255,7 @@ async function gfApiGet(base, path, apiKey, apiSecret) {
     'authorization': `ApiKey ${apiKey}:${sig}`,
   }, null);
   const p = safeParse(result.rawBody);
-  if (!p.ok) throw new Error('GasFree non-JSON: ' + result.rawBody.substring(0, 200));
+  if (!p.ok) throw new Error('GasFree non-JSON: ' + result.rawBody);
   return p.data;
 }
 
@@ -248,9 +269,9 @@ async function gfApiPost(base, path, apiKey, apiSecret, body) {
     'timestamp':     String(ts),
     'authorization': `ApiKey ${apiKey}:${sig}`,
   }, JSON.stringify(body));
-  console.log(`[GF POST] HTTP ${result.status}: ${result.rawBody.substring(0, 300)}`);
+  console.log(`[GF POST] HTTP ${result.status}: ${result.rawBody}`);
   const p = safeParse(result.rawBody);
-  if (!p.ok) throw new Error('GasFree non-JSON: ' + result.rawBody.substring(0, 200));
+  if (!p.ok) throw new Error('GasFree non-JSON: ' + result.rawBody);
   return p.data;
 }
 
@@ -290,7 +311,7 @@ app.post('/proxy/gasfree', async (req, res) => {
     };
     try {
       const result = await rawRequest(targetUrl, m, headers, bodyStr);
-      console.log(`[GF] variant${i+1} → HTTP ${result.status}  "${result.rawBody.substring(0,200)}"`);
+      console.log(`[GF] variant${i+1} → HTTP ${result.status}  "${result.rawBody}"`);
       lastResult = result;
       if (result.status !== 401 && result.status !== 403) {
         const p = safeParse(result.rawBody);
@@ -337,6 +358,20 @@ app.post('/proxy/trongrid', async (req, res) => {
 // Health / SPA
 // ─────────────────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({ ok: true, tronweb: !!TronWeb, ts: Date.now() }));
+
+// Debug: verify that a private key produces the expected address
+app.post('/proxy/verify-key', (req, res) => {
+  if (!TronWeb) return res.status(500).json({ error: 'TronWeb not loaded' });
+  const { privKey } = req.body || {};
+  if (!privKey) return res.status(400).json({ error: 'Missing privKey' });
+  try {
+    const tw = new TronWeb({ fullHost: 'https://api.trongrid.io' });
+    const addr = tw.address.fromPrivateKey(privKey.replace(/^0x/, ''));
+    res.json({ address: addr });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 app.get('*', (_, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3000;
