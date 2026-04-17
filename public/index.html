@@ -485,6 +485,7 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
           <div class="form-group">
             <label class="form-label">Приватный ключ (для подписи)</label>
             <input type="password" class="form-input" id="wd-key" placeholder="64 hex символа…"/>
+            <span class="form-hint" id="wd-key-hint">Выберите кошелёк</span>
             <span class="form-hint">Используется только локально для TIP-712 подписи</span>
           </div>
           <div class="info-box"><span>⚡</span><span>TIP-712 подпись → GasFree relay → ончейн без TRX энергии.</span></div>
@@ -677,9 +678,10 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
         <label class="form-label">Макс. комиссия (USDT)</label>
         <input type="number" class="form-input" id="mwd-maxfee" value="5" step="0.1"/>
       </div>
-      <div class="form-group">
+      <div class="form-group" id="mwd-key-group">
         <label class="form-label">Приватный ключ (64 hex)</label>
         <input type="password" class="form-input" id="mwd-key" placeholder="Для TIP-712 подписи…"/>
+        <span class="form-hint" id="mwd-key-hint"></span>
       </div>
       <div class="info-box"><span>⚡</span><span>GasFree relay отправит транзакцию — TRX не нужен.</span></div>
       <button class="btn btn-primary" id="mwd-btn" onclick="execModalWithdraw()">↑ Отправить USDT</button>
@@ -1354,7 +1356,14 @@ async function doGasFreeWithdraw() {
   const toAddr   = document.getElementById('wd-to').value.trim();
   const amount   = parseFloat(document.getElementById('wd-amount').value);
   const maxfee   = parseFloat(document.getElementById('wd-maxfee').value);
-  const privKey  = document.getElementById('wd-key').value.trim().replace(/^0x/,'');
+  // Use stored key from wallet, fallback to manual input
+  let privKey = document.getElementById('wd-key').value.trim().replace(/^0x/,'');
+  if (!privKey) {
+    // Try to get from DB
+    Object.values(DB).forEach(d => d.active.forEach(w => {
+      if (w.addr === fromAddr && w.privKey) privKey = w.privKey;
+    }));
+  }
 
   if(!fromAddr)                            { toast('Выберите кошелёк', 'error'); return; }
   if(!toAddr.startsWith('T')||toAddr.length<20) { toast('Неверный адрес получателя', 'error'); return; }
@@ -1402,10 +1411,25 @@ function openModalWithdraw(wid, projId) {
   document.getElementById('mwd-maxfee').value          = cfg().maxfee || 5;
   document.getElementById('mwd-to').value     = '';
   document.getElementById('mwd-amount').value = '';
-  document.getElementById('mwd-key').value    = '';
   document.getElementById('mwd-result').style.display = 'none';
   document.getElementById('mwd-btn').innerHTML = '↑ Отправить USDT';
   document.getElementById('mwd-btn').disabled = false;
+
+  // Auto-fill private key if stored, hide field
+  const keyGroup = document.getElementById('mwd-key-group');
+  const keyInput = document.getElementById('mwd-key');
+  const keyHint  = document.getElementById('mwd-key-hint');
+  if (w.privKey) {
+    keyInput.value = w.privKey;
+    keyGroup.style.display = 'none'; // key is stored, no need to show
+    keyHint.textContent = '';
+  } else {
+    keyInput.value = '';
+    keyGroup.style.display = '';
+    keyHint.textContent = 'Ключ не сохранён для этого кошелька — введите вручную';
+    keyHint.style.color = '#ff9100';
+  }
+
   document.getElementById('wd-modal').classList.add('open');
 }
 
@@ -1414,11 +1438,13 @@ async function execModalWithdraw() {
   const toAddr  = document.getElementById('mwd-to').value.trim();
   const amount  = parseFloat(document.getElementById('mwd-amount').value);
   const maxfee  = parseFloat(document.getElementById('mwd-maxfee').value) || 5;
-  const privKey = document.getElementById('mwd-key').value.trim().replace(/^0x/,'');
+
+  // Use stored key first, fallback to input field
+  const privKey = (mwdWallet.privKey || document.getElementById('mwd-key').value.trim()).replace(/^0x/,'');
 
   if(!toAddr.startsWith('T')||toAddr.length<20) { toast('Неверный адрес получателя','error'); return; }
   if(!amount||amount<=0) { toast('Введите сумму','error'); return; }
-  if(!privKey||privKey.length!==64) { toast('Неверный приватный ключ','error'); return; }
+  if(!privKey||privKey.length!==64) { toast('Приватный ключ не найден — введите вручную','error'); return; }
 
   const btn = document.getElementById('mwd-btn');
   btn.innerHTML = '<span class="spin-el"></span> Подпись…';
@@ -1676,9 +1702,26 @@ function populateWithdrawSelect() {
     });
   });
   sel.onchange = () => {
-    let bal = 0;
-    Object.values(DB).forEach(d => d.active.forEach(w=>{ if(w.addr===sel.value) bal=w.balance; }));
+    let bal = 0, storedKey = null;
+    Object.values(DB).forEach(d => d.active.forEach(w => {
+      if (w.addr === sel.value) { bal = w.balance; storedKey = w.privKey || null; }
+    }));
     document.getElementById('wd-avail').textContent = sel.value ? `Доступно: ${fmt(bal)} USDT` : 'Доступно: —';
+    const keyInput = document.getElementById('wd-key');
+    const keyHint  = document.getElementById('wd-key-hint');
+    if (storedKey) {
+      keyInput.value = storedKey;
+      keyHint.textContent = '✓ Ключ загружен автоматически';
+      keyHint.style.color = '#00e676';
+    } else if (sel.value) {
+      keyInput.value = '';
+      keyHint.textContent = 'Ключ не сохранён — введите вручную';
+      keyHint.style.color = '#ff9100';
+    } else {
+      keyInput.value = '';
+      keyHint.textContent = 'Выберите кошелёк';
+      keyHint.style.color = '';
+    }
   };
 }
 
