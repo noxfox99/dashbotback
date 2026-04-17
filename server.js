@@ -262,14 +262,7 @@ app.post('/proxy/transfer', async (req, res) => {
       }
     }
 
-    const domains = []; // not used anymore
-    let lastResult;
-    for (const domain of domains) {
-      let _sig;
-      console.log(`[Transfer] domain=${domain.verifyingContract} sig=${sig.substring(0,16)}...`);
-
-      // Try multiple body formats
-    // Submit with the signature we have
+    // ── Step 4: submit ───────────────────────────────────────────
     const body = {
       token:           usdtAddr,
       serviceProvider: provider,
@@ -283,7 +276,7 @@ app.post('/proxy/transfer', async (req, res) => {
       sig:             sig,
     };
 
-    // Try both known endpoints
+    let lastResult;
     const endpoints = ['/api/v1/gasfree/submit', '/api/v1/transfer'];
     for (const ep of endpoints) {
       console.log(`[Transfer] trying ${ep}:`, JSON.stringify(body));
@@ -294,15 +287,16 @@ app.post('/proxy/transfer', async (req, res) => {
         if (!result.code || result.code === 200) {
           return res.json(result);
         }
-        if (result.code === 400) break; // 400 = bad request, no point retrying other endpoint
+        if (result.code === 400) break;
       } catch(e) {
         console.warn(`[Transfer] ${ep} error:`, e.message);
         lastResult = { code: 500, message: e.message };
       }
     }
 
-    const msg = lastResult?.message || lastResult?.reason || JSON.stringify(lastResult);
-    return res.status(200).json({ error: `GasFree: ${msg}`, raw: lastResult });
+    const errMsg = lastResult?.message || lastResult?.reason || JSON.stringify(lastResult);
+    return res.status(200).json({ error: `GasFree: ${errMsg}`, raw: lastResult });
+
   } catch(e) {
     console.error('[Transfer error]', e.message, e.stack);
     res.status(500).json({ error: e.message });
