@@ -33,13 +33,13 @@ try {
 const GASFREE_DOMAIN_MAINNET = {
   name: 'GasFreeController',
   version: 'V1.0.0',
-  chainId: 3448148188,
+  chainId: 728126428,          // 0x2b6653dc — TRON Mainnet
   verifyingContract: 'THQGuFzL87ZqhxkgqYEryRAd7gqFqL5rdc'
 };
 const GASFREE_DOMAIN_NILE = {
   name: 'GasFreeController',
   version: 'V1.0.0',
-  chainId: 3448148188,
+  chainId: 3448148188,         // 0xcd8690dc — Nile Testnet
   verifyingContract: 'TF49HXMbDdpKbHoRiFxoXTAZZEcRpGFfYx'
 };
 const PERMIT_TYPES = {
