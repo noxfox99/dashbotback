@@ -30,6 +30,17 @@ try {
   console.warn('⚠ TIP-712 module error:', e.message);
 }
 
+// Official GasFree SDK — preferred for correct TIP-712 hashing
+let TronGasFree;
+try {
+  const gfSdk = require('@tronlink/gasfree-sdk-js');
+  TronGasFree = gfSdk.TronGasFree || gfSdk.default?.TronGasFree || gfSdk.default;
+  if (TronGasFree) console.log('✓ Official GasFree SDK loaded');
+  else console.warn('⚠ GasFree SDK loaded but TronGasFree not found, keys:', Object.keys(gfSdk));
+} catch(e) {
+  console.warn('⚠ Official GasFree SDK not available:', e.message, '(will use custom tip712.js)');
+}
+
 // Two known mainnet verifyingContract addresses — server will try both
 const GASFREE_DOMAIN_MAINNET = {
   name: 'GasFreeController',
@@ -191,55 +202,81 @@ app.post('/proxy/transfer', async (req, res) => {
     console.log('[Transfer] permit:', JSON.stringify(permitMessage));
 
     // ── Step 3: TIP-712 sign ─────────────────────────────────────
-    // Try both known mainnet verifyingContracts + all body format variants
-    const domains = network === 'nile'
-      ? [GASFREE_DOMAIN_NILE]
-      : [GASFREE_DOMAIN_MAINNET, GASFREE_DOMAIN_MAINNET_ALT];
-
-    let lastResult;
-    for (const domain of domains) {
-      let sig;
-      if (tip712) {
-        sig = tip712.signPermitTransfer(domain, permitMessage, privKey);
-      } else {
+    // Use official GasFree SDK if available — it handles TIP-712 correctly
+    let sig;
+    if (TronGasFree) {
+      try {
+        const chainId = network === 'nile' ? Number('0xcd8690dc') : Number('0x2b6653dc');
+        const gasFree = new TronGasFree({ chainId });
+        const { domain, types, message } = gasFree.assembleGasFreeTransactionJson({
+          token:           usdtAddr,
+          serviceProvider: provider,
+          user:            fromAddr,
+          receiver:        toAddr,
+          value:           String(valueInt),
+          maxFee:          String(maxFeeInt),
+          deadline:        String(deadline),
+          version:         '1',
+          nonce:           String(nonce),
+        });
+        console.log('[Transfer] SDK domain:', JSON.stringify(domain));
+        console.log('[Transfer] SDK message:', JSON.stringify(message));
         const tw = new TronWeb({ fullHost: rpcUrl });
         tw.setPrivateKey(privKey);
-        const rawSig = await tw.trx._signTypedData(domain, PERMIT_TYPES, permitMessage);
+        const rawSig = await tw.trx._signTypedData(domain, types, message, privKey);
         sig = rawSig.replace(/^0x/, '');
+        console.log('[Transfer] SDK sig:', sig);
+      } catch(e) {
+        console.warn('[Transfer] SDK signing failed, falling back to tip712:', e.message);
+        TronGasFree = null; // disable for next attempts
       }
+    }
+
+    if (!sig) {
+      // Fallback to our custom tip712.js
+      const domain = network === 'nile' ? GASFREE_DOMAIN_NILE : GASFREE_DOMAIN_MAINNET;
+      sig = tip712
+        ? tip712.signPermitTransfer(domain, permitMessage, privKey)
+        : (() => { throw new Error('No signing method available'); })();
+      console.log('[Transfer] custom sig:', sig);
+    }
+
+    const domains = []; // not used anymore
+    let lastResult;
+    for (const domain of domains) {
+      let _sig;
       console.log(`[Transfer] domain=${domain.verifyingContract} sig=${sig.substring(0,16)}...`);
 
       // Try multiple body formats
-      // Canonical body — all strings for value/maxFee/deadline/nonce, sig field
-      const body = {
-        token:           usdtAddr,
-        serviceProvider: provider,
-        user:            fromAddr,
-        receiver:        toAddr,
-        value:           String(valueInt),
-        maxFee:          String(maxFeeInt),
-        deadline:        String(deadline),
-        version:         1,
-        nonce:           parseInt(nonce),
-        sig:             sig,
-      };
+    // Submit with the signature we have
+    const body = {
+      token:           usdtAddr,
+      serviceProvider: provider,
+      user:            fromAddr,
+      receiver:        toAddr,
+      value:           String(valueInt),
+      maxFee:          String(maxFeeInt),
+      deadline:        String(deadline),
+      version:         1,
+      nonce:           parseInt(nonce),
+      sig:             sig,
+    };
 
-      // Try both known endpoints
-      const endpoints = ['/api/v1/gasfree/submit', '/api/v1/transfer'];
-
-      for (const ep of endpoints) {
-        console.log(`[Transfer] trying ${ep}:`, JSON.stringify(body));
-        try {
-          const result = await gfApiPost(gfBase, ep, apiKey, apiSecret, body);
-          console.log(`[Transfer] ${ep} result:`, JSON.stringify(result));
-          lastResult = result;
-          if (!result.code || result.code === 200) {
-            return res.json(result);
-          }
-        } catch(e) {
-          console.warn(`[Transfer] ${ep} error:`, e.message);
-          lastResult = { code: 500, message: e.message };
+    // Try both known endpoints
+    const endpoints = ['/api/v1/gasfree/submit', '/api/v1/transfer'];
+    for (const ep of endpoints) {
+      console.log(`[Transfer] trying ${ep}:`, JSON.stringify(body));
+      try {
+        const result = await gfApiPost(gfBase, ep, apiKey, apiSecret, body);
+        console.log(`[Transfer] ${ep} result:`, JSON.stringify(result));
+        lastResult = result;
+        if (!result.code || result.code === 200) {
+          return res.json(result);
         }
+        if (result.code === 400) break; // 400 = bad request, no point retrying other endpoint
+      } catch(e) {
+        console.warn(`[Transfer] ${ep} error:`, e.message);
+        lastResult = { code: 500, message: e.message };
       }
     }
 
@@ -252,47 +289,28 @@ app.post('/proxy/transfer', async (req, res) => {
 });
 
 // ── GasFree API helpers (server-side) ─────────────────────────────
-// Build signature and make a GasFree request, trying multiple HMAC message formats
+// GasFree API request — HMAC format: METHOD + /tron + path + timestamp (no spaces)
+// This is the only format that passes 401, confirmed from logs
 async function gfRequest(base, path, method, apiKey, apiSecret, body) {
   const ts         = Math.floor(Date.now() / 1000);
   const basePrefix = new URL(base).pathname.replace(/\/$/, ''); // "/tron"
   const m          = method.toUpperCase();
-
-  // All known HMAC message formats — try each until one returns non-401
-  const signFormats = [
-    `${m} ${path} ${ts}`,                   // "GET /api/v1/... ts"  ← per NestJS example
-    `${m} ${basePrefix}${path} ${ts}`,      // "GET /tron/api/v1/... ts"
-    `${m}${basePrefix}${path}${ts}`,        // "GET/tron/api/v1/...ts" no spaces
-    `${m}${path}${ts}`,                     // "GET/api/v1/...ts" no spaces
-  ];
+  // Working format from logs: no spaces, includes /tron prefix
+  const signMsg    = `${m}${basePrefix}${path}${ts}`;
+  const sig        = hmacB64(apiSecret, signMsg);
+  console.log(`[GF] ${m} sign: "${signMsg.substring(0,80)}"`);
 
   const bodyStr = body ? JSON.stringify(body) : null;
-  let lastResult = { status: 500, rawBody: 'no attempt' };
+  const result = await rawRequest(base + path, m, {
+    'timestamp':     String(ts),
+    'x-timestamp':   String(ts),
+    'authorization': `ApiKey ${apiKey}:${sig}`,
+  }, bodyStr);
 
-  for (const msg of signFormats) {
-    const sig = hmacB64(apiSecret, msg);
-    console.log(`[GF] ${m} trying: "${msg.substring(0, 60)}"`);
-    try {
-      const result = await rawRequest(base + path, m, {
-        'timestamp':     String(ts),
-        'x-timestamp':   String(ts),
-        'authorization': `ApiKey ${apiKey}:${sig}`,
-      }, bodyStr);
-      lastResult = result;
-      console.log(`[GF] HTTP ${result.status}: ${result.rawBody.substring(0, 200)}`);
-      // Accept any non-auth-error response
-      if (result.status !== 401 && result.status !== 403) {
-        const p = safeParse(result.rawBody);
-        if (p.ok) return p.data;
-        throw new Error('GasFree non-JSON: ' + result.rawBody);
-      }
-    } catch(e) {
-      if (e.message.startsWith('GasFree non-JSON')) throw e;
-      lastResult = { status: 500, rawBody: e.message };
-    }
-  }
-
-  throw new Error('GasFree auth failed after all variants: ' + lastResult.rawBody);
+  console.log(`[GF] HTTP ${result.status}: ${result.rawBody.substring(0, 400)}`);
+  const p = safeParse(result.rawBody);
+  if (!p.ok) throw new Error('GasFree non-JSON: ' + result.rawBody);
+  return p.data;
 }
 
 async function gfApiGet(base, path, apiKey, apiSecret) {
