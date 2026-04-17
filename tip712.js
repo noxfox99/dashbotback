@@ -1,46 +1,57 @@
 /**
  * TIP-712 signer for GasFree TRON transfers
- * Manual implementation to ensure correct TRON address encoding.
- *
- * TIP-712 vs EIP-712 difference:
- *   TRON addresses are base58check with 0x41 prefix (21 bytes).
- *   For ABI encoding, strip the 0x41 byte and treat remaining 20 bytes as uint160.
+ * Uses ethers.js (bundled with TronWeb v5) for correct ABI encoding and keccak256
  */
 
-const TronWeb = require('tronweb');
-const TW = TronWeb.TronWeb || TronWeb.default || TronWeb;
+const TronWebModule = require('tronweb');
+const TW = TronWebModule.TronWeb || TronWebModule.default || TronWebModule;
 
-// ── keccak256 via ethereum-cryptography ───────────────────────────
-const { keccak256: _keccak } = require('ethereum-cryptography/keccak');
-function keccak256(buf) {
-  return Buffer.from(_keccak(buf instanceof Buffer ? buf : Buffer.from(buf)));
+// ── Get ethers from TronWeb's bundle ─────────────────────────────
+function getEthers() {
+  const tw = new TW({ fullHost: 'https://api.trongrid.io' });
+  if (tw.utils && tw.utils.ethersUtils) return tw.utils.ethersUtils;
+  // try direct require paths inside tronweb
+  try { return require('tronweb/src/utils/ethersUtils'); } catch(e) {}
+  try { return require('ethers').utils; } catch(e) {}
+  throw new Error('Cannot find ethers utils');
 }
 
-// ── TRON base58check → 32-byte padded hex ────────────────────────
-function tronAddrTo32Bytes(addr) {
-  // TronWeb.utils.crypto.decodeBase58Address returns hex string like "41abcd..."
-  // or use address.toHex which returns "41abcd..."
+const ethers = getEthers();
+console.log('[TIP712] ethers loaded, keccak256:', typeof ethers.keccak256);
+
+// ── keccak256 wrapper ─────────────────────────────────────────────
+function keccak(data) {
+  // data can be Buffer or Uint8Array
+  const hex = ethers.keccak256(data);
+  return Buffer.from(hex.replace('0x',''), 'hex');
+}
+
+// ── Convert TRON base58 address → 0x Ethereum-style address ──────
+// TRON hex = "41" + 40 chars. Strip "41", prepend "0x" → Ethereum address
+function tronToEthAddr(tronBase58) {
   const tw = new TW({ fullHost: 'https://api.trongrid.io' });
-  let hex = tw.address.toHex(addr); // returns "41" + 40 hex chars = 42 chars
-  if (!hex) throw new Error('Cannot convert address: ' + addr);
-  hex = hex.replace(/^0x/, '');
-  // Strip the leading "41" (TRON network byte) → 40 hex chars = 20 bytes
-  if (hex.startsWith('41')) hex = hex.slice(2);
-  else if (hex.startsWith('a0')) hex = hex.slice(2); // Nile prefix
-  // Pad to 32 bytes (64 hex chars)
-  return hex.padStart(64, '0');
+  const hexFull = tw.address.toHex(tronBase58); // "41xxxxxx..."
+  const stripped = hexFull.replace(/^41/, '').replace(/^0x41/, '');
+  return '0x' + stripped; // 0x + 40 hex chars = Ethereum address
+}
+
+// ── ABI encode address → 32 bytes (padded left) ───────────────────
+function encodeAddress(tronBase58) {
+  const ethAddr = tronToEthAddr(tronBase58);
+  // Ethereum address is 20 bytes, pad to 32
+  return Buffer.from(ethAddr.replace('0x','').padStart(64, '0'), 'hex');
 }
 
 // ── ABI encode uint256 → 32 bytes ────────────────────────────────
-function uint256(val) {
-  return BigInt(val).toString(16).padStart(64, '0');
+function encodeUint256(val) {
+  return Buffer.from(BigInt(val).toString(16).padStart(64, '0'), 'hex');
 }
 
 // ── Type strings ─────────────────────────────────────────────────
-const DOMAIN_TYPE =
+const DOMAIN_TYPE_STRING =
   'EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)';
 
-const PERMIT_TYPE =
+const PERMIT_TYPE_STRING =
   'PermitTransfer(' +
   'address token,' +
   'address serviceProvider,' +
@@ -53,91 +64,82 @@ const PERMIT_TYPE =
   'uint256 nonce' +
   ')';
 
-// ── Hash the domain separator ─────────────────────────────────────
+// ── Hash domain separator ─────────────────────────────────────────
 function hashDomain(domain) {
-  const typeHash    = keccak256(Buffer.from(DOMAIN_TYPE));
-  const nameHash    = keccak256(Buffer.from(domain.name));
-  const verHash     = keccak256(Buffer.from(domain.version));
-  const chainId     = Buffer.from(uint256(domain.chainId), 'hex');
-  const contract    = Buffer.from(tronAddrTo32Bytes(domain.verifyingContract), 'hex');
+  const typeHash   = keccak(Buffer.from(DOMAIN_TYPE_STRING));
+  const nameHash   = keccak(Buffer.from(domain.name));
+  const verHash    = keccak(Buffer.from(domain.version));
+  const chainId    = encodeUint256(domain.chainId);
+  const contract   = encodeAddress(domain.verifyingContract);
 
   console.log('[TIP712] domainTypeHash:', typeHash.toString('hex'));
-  console.log('[TIP712] nameHash:', nameHash.toString('hex'));
-  console.log('[TIP712] verHash:', verHash.toString('hex'));
-  console.log('[TIP712] chainId32:', chainId.toString('hex'));
-  console.log('[TIP712] contract32:', contract.toString('hex'));
+  console.log('[TIP712] nameHash:      ', nameHash.toString('hex'));
+  console.log('[TIP712] verHash:       ', verHash.toString('hex'));
+  console.log('[TIP712] chainId32:     ', chainId.toString('hex'));
+  console.log('[TIP712] contract32:    ', contract.toString('hex'));
+  console.log('[TIP712] contractEth:   ', tronToEthAddr(domain.verifyingContract));
 
   const encoded = Buffer.concat([typeHash, nameHash, verHash, chainId, contract]);
-  return keccak256(encoded);
+  const h = keccak(encoded);
+  console.log('[TIP712] domainHash:    ', h.toString('hex'));
+  return h;
 }
 
-// ── Hash the permit message ───────────────────────────────────────
+// ── Hash permit message ───────────────────────────────────────────
 function hashMessage(msg) {
-  const typeHash = keccak256(Buffer.from(PERMIT_TYPE));
-
-  const token    = Buffer.from(tronAddrTo32Bytes(msg.token),           'hex');
-  const provider = Buffer.from(tronAddrTo32Bytes(msg.serviceProvider),  'hex');
-  const user     = Buffer.from(tronAddrTo32Bytes(msg.user),             'hex');
-  const receiver = Buffer.from(tronAddrTo32Bytes(msg.receiver),         'hex');
-  const value    = Buffer.from(uint256(msg.value),    'hex');
-  const maxFee   = Buffer.from(uint256(msg.maxFee),   'hex');
-  const deadline = Buffer.from(uint256(msg.deadline), 'hex');
-  const version  = Buffer.from(uint256(msg.version),  'hex');
-  const nonce    = Buffer.from(uint256(msg.nonce),     'hex');
+  const typeHash = keccak(Buffer.from(PERMIT_TYPE_STRING));
+  const token    = encodeAddress(msg.token);
+  const provider = encodeAddress(msg.serviceProvider);
+  const user     = encodeAddress(msg.user);
+  const receiver = encodeAddress(msg.receiver);
+  const value    = encodeUint256(msg.value);
+  const maxFee   = encodeUint256(msg.maxFee);
+  const deadline = encodeUint256(msg.deadline);
+  const version  = encodeUint256(msg.version);
+  const nonce    = encodeUint256(msg.nonce);
 
   console.log('[TIP712] permitTypeHash:', typeHash.toString('hex'));
-  console.log('[TIP712] token32:', token.toString('hex'));
-  console.log('[TIP712] user32:', user.toString('hex'));
+  console.log('[TIP712] token (eth):   ', tronToEthAddr(msg.token));
+  console.log('[TIP712] user (eth):    ', tronToEthAddr(msg.user));
 
   const encoded = Buffer.concat([
     typeHash, token, provider, user, receiver,
     value, maxFee, deadline, version, nonce
   ]);
-  return keccak256(encoded);
+  const h = keccak(encoded);
+  console.log('[TIP712] msgHash:       ', h.toString('hex'));
+  return h;
 }
 
-// ── Build final sign hash ─────────────────────────────────────────
+// ── Build final EIP-712 hash ──────────────────────────────────────
 function buildSignHash(domain, msg) {
-  const domainHash  = hashDomain(domain);
-  const msgHash     = hashMessage(msg);
-  console.log('[TIP712] domainHash:', domainHash.toString('hex'));
-  console.log('[TIP712] msgHash:', msgHash.toString('hex'));
-
-  const payload = Buffer.concat([
-    Buffer.from([0x19, 0x01]),
-    domainHash,
-    msgHash,
-  ]);
-  return keccak256(payload);
+  const domainHash = hashDomain(domain);
+  const msgHash    = hashMessage(msg);
+  const payload    = Buffer.concat([Buffer.from([0x19, 0x01]), domainHash, msgHash]);
+  const h = keccak(payload);
+  console.log('[TIP712] finalHash:     ', h.toString('hex'));
+  return h;
 }
 
-// ── secp256k1 sign ───────────────────────────────────────────────
+// ── Sign with secp256k1 ───────────────────────────────────────────
 function ecSign(hashBuf, privKeyHex) {
-  // Use TronWeb's bundled elliptic
-  const tw = new TW({ fullHost: 'https://api.trongrid.io' });
+  const privKey = privKeyHex.replace(/^0x/, '');
 
-  // Method 1: TronWeb.utils.crypto.signBytes (returns hex sig)
+  // Use TronWeb's signBytes which does raw secp256k1 + adds 27 to v
   if (TW.utils && TW.utils.crypto && TW.utils.crypto.signBytes) {
-    try {
-      const sig = TW.utils.crypto.signBytes(privKeyHex, hashBuf);
-      console.log('[TIP712] signBytes result:', sig);
-      return sig.replace(/^0x/, '').toLowerCase();
-    } catch(e) {
-      console.warn('[TIP712] signBytes failed:', e.message);
-    }
+    const sig = TW.utils.crypto.signBytes(privKey, hashBuf);
+    const result = sig.replace(/^0x/, '').toLowerCase();
+    console.log('[TIP712] signBytes:     ', result.substring(0, 20) + '...' + result.slice(-4));
+    return result;
   }
 
-  // Method 2: tw.trx.sign on raw hash (not recommended but fallback)
-  throw new Error('Cannot sign: TronWeb.utils.crypto.signBytes not available');
+  throw new Error('TW.utils.crypto.signBytes not available');
 }
 
 // ── Main export ───────────────────────────────────────────────────
 function signPermitTransfer(domain, msg, privKeyHex) {
   const signHash = buildSignHash(domain, msg);
-  console.log('[TIP712] finalHash:', signHash.toString('hex'));
-  const sig = ecSign(signHash, privKeyHex);
-  console.log('[TIP712] signature:', sig);
-  return sig;
+  return ecSign(signHash, privKeyHex);
 }
 
-module.exports = { signPermitTransfer, buildSignHash };
+module.exports = { signPermitTransfer, buildSignHash, tronToEthAddr };
