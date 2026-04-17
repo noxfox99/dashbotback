@@ -94,36 +94,144 @@ function hmacB64(secret, message) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// /proxy/sign  — TIP-712 signing on server (Node.js Buffer works natively)
-// Body: { privKey, permitMessage, network }
+// /proxy/sign  — TIP-712 signing only
+// Body: { privKey, permitMessage, network, rpc?, tgKey? }
 // ─────────────────────────────────────────────────────────────────
 app.post('/proxy/sign', async (req, res) => {
-  if (!TronWeb) return res.status(500).json({ error: 'TronWeb not installed on server. Run: npm install tronweb' });
-
+  if (!TronWeb) return res.status(500).json({ error: 'TronWeb not installed. Run: npm install tronweb' });
   const { privKey, permitMessage, network, rpc, tgKey } = req.body || {};
   if (!privKey || !permitMessage) return res.status(400).json({ error: 'Missing privKey or permitMessage' });
-
   try {
-    const fullHost = rpc || 'https://api.trongrid.io';
-    const headers  = tgKey ? { 'TRON-PRO-API-KEY': tgKey } : {};
-    const tw = new TronWeb({ fullHost, headers });
+    const tw = new TronWeb({ fullHost: rpc || 'https://api.trongrid.io' });
     tw.setPrivateKey(privKey);
-
     const domain = (network === 'nile') ? GASFREE_DOMAIN_NILE : GASFREE_DOMAIN_MAINNET;
-
-    console.log('[Sign] domain:', JSON.stringify(domain));
-    console.log('[Sign] message:', JSON.stringify(permitMessage));
-
     const sig = await tw.trx._signTypedData(domain, PERMIT_TYPES, permitMessage);
-    const signature = sig.replace(/^0x/, '');
-
-    console.log('[Sign] signature:', signature);
-    res.json({ signature });
+    res.json({ signature: sig.replace(/^0x/, '') });
   } catch(e) {
-    console.error('[Sign error]', e.message, e.stack);
+    console.error('[Sign error]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
+
+// ─────────────────────────────────────────────────────────────────
+// /proxy/transfer  — full GasFree transfer flow on server
+// Signs TIP-712 + submits to GasFree API, all in one call
+// Body: { privKey, fromAddr, toAddr, amountUsdt, maxFeeUsdt,
+//         apiKey, apiSecret, baseUrl, provider, usdt, network, rpc, tgKey }
+// ─────────────────────────────────────────────────────────────────
+app.post('/proxy/transfer', async (req, res) => {
+  if (!TronWeb) return res.status(500).json({ error: 'TronWeb not installed. Run: npm install tronweb' });
+
+  const {
+    privKey, fromAddr, toAddr,
+    amountUsdt, maxFeeUsdt,
+    apiKey, apiSecret, baseUrl,
+    provider, usdt,
+    network, rpc, tgKey,
+  } = req.body || {};
+
+  if (!privKey || !fromAddr || !toAddr) return res.status(400).json({ error: 'Missing required fields' });
+  if (!apiKey || !apiSecret)            return res.status(400).json({ error: 'Missing apiKey / apiSecret' });
+  if (!provider)                        return res.status(400).json({ error: 'Missing provider address' });
+
+  try {
+    const gfBase  = (baseUrl || 'https://open.gasfree.io/tron').replace(/\/$/, '');
+    const rpcUrl  = rpc || 'https://api.trongrid.io';
+    const usdtAddr = usdt || 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+
+    // ── Step 1: get nonce from GasFree ──────────────────────────
+    const acctPath = `/api/v1/address/${fromAddr}`;
+    const acctData = await gfApiGet(gfBase, acctPath, apiKey, apiSecret);
+    const acct     = acctData.data || acctData;
+    const nonce    = Number(acct.nonce ?? 0);
+    console.log(`[Transfer] nonce=${nonce} active=${acct.active}`);
+
+    // ── Step 2: build permit message ────────────────────────────
+    const valueInt  = Math.round(parseFloat(amountUsdt) * 1e6);
+    const maxFeeInt = Math.round(parseFloat(maxFeeUsdt || 5) * 1e6);
+    const deadline  = Math.floor(Date.now() / 1000) + 600;
+
+    const permitMessage = {
+      token:           usdtAddr,
+      serviceProvider: provider,
+      user:            fromAddr,
+      receiver:        toAddr,
+      value:           valueInt,
+      maxFee:          maxFeeInt,
+      deadline:        deadline,
+      version:         1,
+      nonce:           nonce,
+    };
+    console.log('[Transfer] permit:', JSON.stringify(permitMessage));
+
+    // ── Step 3: TIP-712 sign ─────────────────────────────────────
+    const tw = new TronWeb({ fullHost: rpcUrl });
+    tw.setPrivateKey(privKey);
+    const domain = (network === 'nile') ? GASFREE_DOMAIN_NILE : GASFREE_DOMAIN_MAINNET;
+    const rawSig  = await tw.trx._signTypedData(domain, PERMIT_TYPES, permitMessage);
+    const sig     = rawSig.replace(/^0x/, '');
+    console.log('[Transfer] sig:', sig);
+
+    // ── Step 4: submit — exact body format from GasFree Ruby SDK ─
+    // value/maxFee = string, deadline = number, nonce = number, sig = string
+    const body = {
+      token:           usdtAddr,
+      serviceProvider: provider,
+      user:            fromAddr,
+      receiver:        toAddr,
+      value:           String(valueInt),
+      maxFee:          String(maxFeeInt),
+      deadline:        deadline,
+      version:         1,
+      nonce:           nonce,
+      sig:             sig,
+    };
+    console.log('[Transfer] submit body:', JSON.stringify(body));
+
+    const result = await gfApiPost(gfBase, '/api/v1/transfer', apiKey, apiSecret, body);
+    console.log('[Transfer] result:', JSON.stringify(result));
+
+    if (result.code && result.code !== 200) {
+      return res.status(200).json({
+        error: result.message || result.reason || JSON.stringify(result),
+        raw:   result,
+      });
+    }
+    res.json(result);
+  } catch(e) {
+    console.error('[Transfer error]', e.message, e.stack);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GasFree API helpers (server-side) ─────────────────────────────
+async function gfApiGet(base, path, apiKey, apiSecret) {
+  const ts  = Math.floor(Date.now() / 1000);
+  const sig = hmacB64(apiSecret, `GET${base.replace(/https?:\/\/[^/]+/, '')}${path}${ts}`);
+  const result = await rawRequest(base + path, 'GET', {
+    'timestamp':     String(ts),
+    'authorization': `ApiKey ${apiKey}:${sig}`,
+  }, null);
+  const p = safeParse(result.rawBody);
+  if (!p.ok) throw new Error('GasFree non-JSON: ' + result.rawBody.substring(0, 200));
+  return p.data;
+}
+
+async function gfApiPost(base, path, apiKey, apiSecret, body) {
+  const ts  = Math.floor(Date.now() / 1000);
+  // variant2 path = /tron + path (what worked for GET)
+  const basePrefix = new URL(base).pathname.replace(/\/$/, '');
+  const signPath   = basePrefix + path;
+  const sig = hmacB64(apiSecret, `POST${signPath}${ts}`);
+  const result = await rawRequest(base + path, 'POST', {
+    'timestamp':     String(ts),
+    'authorization': `ApiKey ${apiKey}:${sig}`,
+  }, JSON.stringify(body));
+  console.log(`[GF POST] HTTP ${result.status}: ${result.rawBody.substring(0, 300)}`);
+  const p = safeParse(result.rawBody);
+  if (!p.ok) throw new Error('GasFree non-JSON: ' + result.rawBody.substring(0, 200));
+  return p.data;
+}
 
 // ─────────────────────────────────────────────────────────────────
 // /proxy/gasfree  — GasFree API proxy with HMAC-SHA256 auth
