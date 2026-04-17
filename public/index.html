@@ -339,9 +339,69 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
 .table-wrap { overflow-x:auto; }
 .table-wrap::-webkit-scrollbar{height:3px} .table-wrap::-webkit-scrollbar-thumb{background:#22304a;border-radius:2px}
 @media(max-width:800px){ .layout{grid-template-columns:1fr;grid-template-rows:54px auto 1fr} .sidebar{display:none} .stats-row{grid-template-columns:1fr 1fr} .form-row{grid-template-columns:1fr} }
+
+/* ── AUTH ───────────────────────────────────────────────────── */
+.auth-overlay {
+  position:fixed; inset:0; z-index:9999;
+  background:#07090d;
+  display:flex; align-items:center; justify-content:center;
+}
+.auth-box {
+  background:#0c1018; border:1px solid #1a2535; border-radius:12px;
+  padding:40px 36px; width:360px; max-width:95vw;
+  display:flex; flex-direction:column; gap:20px;
+  animation:modal-in .25s ease;
+}
+.auth-logo {
+  display:flex; align-items:center; gap:10px;
+  font-weight:800; font-size:20px; color:#00e5ff;
+  text-shadow:0 0 24px rgba(0,229,255,0.3);
+  justify-content:center; margin-bottom:4px;
+}
+.auth-logo-hex {
+  width:28px; height:28px; background:#00e5ff; flex-shrink:0;
+  clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+}
+.auth-title { font-size:13px; color:#6e8fad; text-align:center; margin-top:-8px; }
+.auth-error {
+  background:rgba(255,59,92,.1); border:1px solid rgba(255,59,92,.25);
+  border-radius:6px; padding:10px 13px; font-size:12px; color:#ff3b5c;
+  display:none; text-align:center;
+}
+.auth-error.show { display:block; }
+.auth-user-label {
+  font-size:10px; font-weight:700; letter-spacing:1.5px;
+  color:#334d66; text-transform:uppercase; margin-bottom:4px;
+}
 </style>
 </head>
 <body>
+
+<div id="auth-overlay" class="auth-overlay">
+  <div class="auth-box">
+    <div class="auth-logo"><div class="auth-logo-hex"></div>TRONGF</div>
+    <div class="auth-title">Панель управления · Вход</div>
+    <div id="auth-error" class="auth-error">Неверный пароль</div>
+    <div>
+      <div class="auth-user-label">Пользователь</div>
+      <select class="form-input" id="auth-user">
+        <option value="admin">Super Admin</option>
+        <option value="mull">Mull (Tab 1)</option>
+        <option value="time">Time (Tab 2)</option>
+        <option value="sov">Sov (Tab 3)</option>
+        <option value="rail">Rail (Tab 4)</option>
+        <option value="temp">Temp (Tab 5)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Пароль</label>
+      <input type="password" class="form-input" id="auth-pass" placeholder="Введите пароль…"
+             onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <button class="btn btn-primary" onclick="doLogin()">→ Войти</button>
+  </div>
+</div>
+
 <div class="layout">
 
 <header class="topbar">
@@ -580,10 +640,10 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
         <div class="form-group">
           <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
             Приватный ключ <span class="badge badge-yellow" style="margin-left:8px">⚠ Секрет</span>
-            <button class="btn btn-ghost btn-xs" style="margin-left:auto" onclick="document.getElementById('gr-key').classList.toggle('show')">👁 Показать</button>
+            <button class="btn btn-ghost btn-xs" style="margin-left:auto" onclick="if(guardKeys()) document.getElementById('gr-key').classList.toggle('show')">👁 Показать</button>
           </label>
           <span id="gr-key" class="key-blurred" style="font-family:'Space Mono',monospace;font-size:11px;color:#ffd600;word-break:break-all;display:block;padding:10px 12px;background:#101620;border:1px solid #1a2535;border-radius:5px;line-height:1.6"></span>
-          <button class="copy-btn" style="margin-top:4px;width:fit-content" onclick="copyText(document.getElementById('gr-key').textContent,this)">Копировать ключ</button>
+          <button class="copy-btn" style="margin-top:4px;width:fit-content" onclick="if(guardKeys()) copyText(document.getElementById('gr-key').textContent,this)">Копировать ключ</button>
         </div>
         <div class="warn-box"><span>⚠</span><span>Сохраните приватный ключ офлайн в надёжном месте. Восстановление невозможно.</span></div>
         <div id="gen-gf-info" style="display:none;flex-direction:column;gap:6px">
@@ -1264,8 +1324,10 @@ async function buildAndSubmitTransfer(fromAddr, privKey, toAddr, amountUSDT, max
   console.log('[Transfer] Signature:', sig);
 
   // Step 4: submit to GasFree relay
-  // Fields match the API exactly — try both /transfer and /transfer/submit
-  const body = {
+  // Try all known field name variants across different GasFree API versions
+
+  // Variant A: sig field (older docs)
+  const bodyA = {
     token:           c.usdt,
     serviceProvider: c.provider,
     user:            fromAddr,
@@ -1278,29 +1340,66 @@ async function buildAndSubmitTransfer(fromAddr, privKey, toAddr, amountUSDT, max
     sig:             sig,
   };
 
-  console.log('[Transfer] Submitting body:', JSON.stringify(body));
+  // Variant B: signature field (newer docs)
+  const bodyB = { ...bodyA, signature: sig };
+  delete bodyB.sig;
 
-  // Try /transfer first (from docs), fallback to /transfer/submit
-  let result;
-  try {
-    result = await gfPost('/transfer', body);
-    console.log('[Transfer] /transfer response:', JSON.stringify(result));
-  } catch(e) {
-    console.warn('[Transfer] /transfer failed:', e.message, '— trying /transfer/submit');
-    result = await gfPost('/transfer/submit', body);
-    console.log('[Transfer] /transfer/submit response:', JSON.stringify(result));
+  // Variant C: numeric value/maxFee/deadline/nonce
+  const bodyC = {
+    token:           c.usdt,
+    serviceProvider: c.provider,
+    user:            fromAddr,
+    receiver:        toAddr,
+    value:           valueInt,
+    maxFee:          maxFeeInt,
+    deadline:        deadline,
+    version:         1,
+    nonce:           nonce,
+    sig:             sig,
+  };
+
+  // Variant D: numeric + signature field name
+  const bodyD = { ...bodyC, signature: sig };
+  delete bodyD.sig;
+
+  const attempts = [
+    { endpoint: '/transfer',        body: bodyA, label: 'A: /transfer sig=string' },
+    { endpoint: '/transfer',        body: bodyB, label: 'B: /transfer signature=string' },
+    { endpoint: '/transfer',        body: bodyC, label: 'C: /transfer sig=number' },
+    { endpoint: '/transfer',        body: bodyD, label: 'D: /transfer signature=number' },
+    { endpoint: '/transfer/submit', body: bodyA, label: 'E: /transfer/submit sig=string' },
+    { endpoint: '/transfer/submit', body: bodyB, label: 'F: /transfer/submit signature=string' },
+  ];
+
+  let lastResult;
+  for (const attempt of attempts) {
+    console.log(`[Transfer] Trying ${attempt.label}:`, JSON.stringify(attempt.body));
+    try {
+      const result = await gfPost(attempt.endpoint, attempt.body);
+      console.log(`[Transfer] ${attempt.label} response:`, JSON.stringify(result));
+      lastResult = result;
+
+      // Success — no code 500/400
+      if (!result || result.code === undefined || (result.code >= 200 && result.code < 300)) {
+        return result;
+      }
+      if (result.code !== 500 && result.code !== 400 && result.code !== 422) {
+        return result;
+      }
+      console.warn(`[Transfer] ${attempt.label} returned code ${result.code}, trying next...`);
+    } catch(e) {
+      console.warn(`[Transfer] ${attempt.label} threw:`, e.message);
+      lastResult = { code: 500, message: e.message };
+    }
   }
 
-  // Check for error in response body
-  if (result && (result.code === 500 || result.code === 400 || result.error)) {
-    const msg = result.message || result.reason || result.error || JSON.stringify(result);
-    throw new Error(`GasFree relay: ${msg}`);
-  }
-
-  return result;
+  // All failed — throw with last response
+  const msg = lastResult?.message || lastResult?.reason || JSON.stringify(lastResult);
+  throw new Error(`GasFree relay ошибка: ${msg}`);
 }
 
 async function doGasFreeWithdraw() {
+  if (!guardWithdraw()) return;
   const fromAddr = document.getElementById('wd-from-select').value;
   const toAddr   = document.getElementById('wd-to').value.trim();
   const amount   = parseFloat(document.getElementById('wd-amount').value);
@@ -1361,6 +1460,7 @@ function openModalWithdraw(wid, projId) {
 }
 
 async function execModalWithdraw() {
+  if (!guardWithdraw()) return;
   const toAddr  = document.getElementById('mwd-to').value.trim();
   const amount  = parseFloat(document.getElementById('mwd-amount').value);
   const maxfee  = parseFloat(document.getElementById('mwd-maxfee').value) || 5;
@@ -1534,7 +1634,7 @@ function renderWalletItem(w, projId, archived) {
       <div class="wallet-actions">
         ${!archived?`
           <button class="btn btn-ghost btn-xs" onclick="refreshSingleBalance('${w.id}','${projId}')">↻</button>
-          <button class="btn btn-outline btn-xs" onclick="openModalWithdraw('${w.id}','${projId}')">↑ Вывод</button>
+          ${currentRole && currentRole.canWithdraw ? `<button class="btn btn-outline btn-xs" onclick="openModalWithdraw('${w.id}','${projId}')">↑ Вывод</button>` : ''}
           ${!w.enrolled?`<button class="btn btn-ghost btn-xs" onclick="enrollWalletGF('${w.id}','${projId}')">⚡ GF статус</button>`:''}
           <button class="btn btn-ghost btn-xs" onclick="archiveWallet('${w.id}','${projId}')">Архив</button>
         `:`
@@ -1673,11 +1773,164 @@ function toast(msg,type='info') {
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', () => {
   loadConfigFromStorage();
+  checkSession();
   renderProjTabs();
   renderAllProjPanels();
   populateWithdrawSelect();
   updateGlobalStats();
 });
+
+// ═══════════════════════════════════════════════════════════════
+// AUTH — ROLE-BASED ACCESS CONTROL
+// ═══════════════════════════════════════════════════════════════
+
+// ── HARDCODED PASSWORDS — change these directly in this file ──
+const PASSWORDS = {
+  admin: 'admin123',   // Super Admin — full access
+  mull:  'mull111',    // User Mull   — tab Mull only
+  time:  'time222',    // User Time   — tab Time only
+  sov:   'sov333',     // User Sov    — tab Sov only
+  rail:  'rail444',    // User Rail   — tab Rail only
+  temp:  'temp555',    // User Temp   — tab Temp only
+};
+
+// ── ROLES ──
+const ROLES = {
+  admin: { label:'Super Admin', tabs:['mull','time','sov','rail','temp'], canWithdraw:true,  canConfig:true,  canSeeKeys:true  },
+  mull:  { label:'Mull',        tabs:['mull'],                            canWithdraw:false, canConfig:false, canSeeKeys:false },
+  time:  { label:'Time',        tabs:['time'],                            canWithdraw:false, canConfig:false, canSeeKeys:false },
+  sov:   { label:'Sov',         tabs:['sov'],                             canWithdraw:false, canConfig:false, canSeeKeys:false },
+  rail:  { label:'Rail',        tabs:['rail'],                            canWithdraw:false, canConfig:false, canSeeKeys:false },
+  temp:  { label:'Temp',        tabs:['temp'],                            canWithdraw:false, canConfig:false, canSeeKeys:false },
+};
+
+let currentRole = null; // set after login
+
+function doLogin() {
+  const userId = document.getElementById('auth-user').value;
+  const pass   = document.getElementById('auth-pass').value;
+  const errEl  = document.getElementById('auth-error');
+
+  if (!pass || PASSWORDS[userId] !== pass) {
+    errEl.textContent = 'Неверный пароль';
+    errEl.classList.add('show');
+    document.getElementById('auth-pass').value = '';
+    document.getElementById('auth-pass').focus();
+    return;
+  }
+
+  currentRole = ROLES[userId];
+  errEl.classList.remove('show');
+
+  // Hide login screen
+  document.getElementById('auth-overlay').style.display = 'none';
+
+  // Apply role restrictions
+  applyRole(userId);
+
+  // Store in sessionStorage (clears on tab close)
+  try { sessionStorage.setItem('tgf_role', userId); } catch(e) {}
+
+  toast(`Добро пожаловать, ${currentRole.label}!`, 'success');
+}
+
+function applyRole(userId) {
+  const role = ROLES[userId];
+  currentRole = role;
+
+  // ── Project tabs: hide tabs user can't access ──
+  PROJECTS.forEach(p => {
+    const tabEl = document.getElementById('ptab-' + p.id);
+    if (tabEl) tabEl.style.display = role.tabs.includes(p.id) ? '' : 'none';
+  });
+
+  // Switch to first allowed tab
+  if (!role.tabs.includes(currentProjId)) {
+    switchProjTab(role.tabs[0]);
+  }
+
+  // ── Topbar: hide Withdraw and Config for non-admins ──
+  document.querySelectorAll('.topbar-nav-btn').forEach(btn => {
+    const txt = btn.textContent.trim();
+    if (txt === 'Вывод' && !role.canWithdraw)   btn.style.display = 'none';
+    if (txt === 'Настройки' && !role.canConfig)  btn.style.display = 'none';
+  });
+
+  // ── Sidebar: hide Withdraw and Config nav items ──
+  document.querySelectorAll('.nav-item').forEach(item => {
+    const txt = item.textContent.trim();
+    if ((txt.includes('Вывод') || txt.includes('вывод')) && !role.canWithdraw) item.style.display = 'none';
+    if ((txt.includes('Настройки') || txt.includes('настройки')) && !role.canConfig) item.style.display = 'none';
+  });
+
+  // ── Show role badge in topbar ──
+  const existing = document.getElementById('role-badge');
+  if (existing) existing.remove();
+  const badge = document.createElement('div');
+  badge.id = 'role-badge';
+  badge.style.cssText = 'display:flex;align-items:center;gap:7px;padding:4px 11px;border-radius:5px;font-size:11px;font-weight:700;background:rgba(0,229,255,0.07);border:1px solid rgba(0,229,255,0.15);color:#6e8fad;white-space:nowrap;';
+  badge.innerHTML = `<span style="color:#00e5ff">◈</span> ${role.label}
+    <button onclick="doLogout()" style="background:none;border:none;color:#334d66;cursor:pointer;font-size:11px;margin-left:4px;font-family:'Syne',sans-serif;padding:0" title="Выйти">✕</button>`;
+  document.querySelector('.topbar-right').prepend(badge);
+
+  // ── Page-level restrictions ──
+  if (!role.canWithdraw) {
+    // If somehow on withdraw page, redirect
+    const wdPage = document.getElementById('page-withdraw');
+    if (wdPage && wdPage.classList.contains('active')) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-wallets').classList.add('active');
+    }
+  }
+}
+
+function doLogout() {
+  currentRole = null;
+  try { sessionStorage.removeItem('tgf_role'); } catch(e) {}
+  // Clear password field and show login
+  document.getElementById('auth-pass').value = '';
+  document.getElementById('auth-overlay').style.display = 'flex';
+  // Reset nav buttons visibility
+  document.querySelectorAll('.topbar-nav-btn').forEach(b => b.style.display = '');
+  document.querySelectorAll('.nav-item').forEach(b => b.style.display = '');
+  PROJECTS.forEach(p => {
+    const t = document.getElementById('ptab-' + p.id);
+    if(t) t.style.display = '';
+  });
+  const badge = document.getElementById('role-badge');
+  if (badge) badge.remove();
+}
+
+// Guard: intercept withdraw attempts from non-admins
+function guardWithdraw() {
+  if (!currentRole || !currentRole.canWithdraw) {
+    toast('Нет доступа — только Super Admin может выводить средства', 'error');
+    return false;
+  }
+  return true;
+}
+
+// Guard: intercept key reveal for non-admins
+function guardKeys() {
+  if (!currentRole || !currentRole.canSeeKeys) {
+    toast('Нет доступа к приватным ключам', 'error');
+    return false;
+  }
+  return true;
+}
+
+// Check session on load — restore role if session exists
+function checkSession() {
+  try {
+    const saved = sessionStorage.getItem('tgf_role');
+    if (saved && ROLES[saved]) {
+      currentRole = ROLES[saved];
+      document.getElementById('auth-overlay').style.display = 'none';
+      applyRole(saved);
+    }
+  } catch(e) {}
+}
+
 </script>
 </body>
 </html>
