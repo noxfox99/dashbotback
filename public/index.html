@@ -1708,7 +1708,9 @@ function populateWithdrawSelect() {
     DB[p.id].active.forEach(w => {
       const opt = document.createElement('option');
       opt.value = w.addr;
-      opt.textContent = `[${p.name}] ${w.addr.substring(0,14)}… · ${fmt(w.balance)} USDT`;
+      const displayAddr = w.gasFreeAddr ? w.gasFreeAddr.substring(0,14) + '…' : w.addr.substring(0,14) + '…';
+      const label = w.label ? `${w.label} · ` : '';
+      opt.textContent = `[${p.name}] ${label}${displayAddr} · ${fmt(w.balance)} USDT`;
       sel.appendChild(opt);
     });
   });
@@ -1845,9 +1847,15 @@ function applyRole(userId) {
     if (tabEl) tabEl.style.display = role.tabs.includes(p.id) ? '' : 'none';
   });
 
+  // Re-render all panels so withdraw buttons reflect the role
+  renderAllProjPanels();
+  populateWithdrawSelect();
+
   // Switch to first allowed tab
   if (!role.tabs.includes(currentProjId)) {
     switchProjTab(role.tabs[0]);
+  } else {
+    switchProjTab(currentProjId);
   }
 
   // ── Topbar: hide Withdraw and Config for non-admins ──
