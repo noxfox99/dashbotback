@@ -686,6 +686,24 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
   </div>
 </div>
 
+<!-- TX HISTORY MODAL -->
+<div class="modal-overlay" id="tx-modal">
+  <div class="modal" style="width:680px;max-height:85vh;display:flex;flex-direction:column;">
+    <button class="modal-close" onclick="closeModal('tx-modal')">✕</button>
+    <div class="modal-title" id="tx-modal-title">История транзакций</div>
+    <div id="tx-modal-addr" style="font-family:'Space Mono',monospace;font-size:10px;color:#29d4e8;margin-bottom:14px;word-break:break-all;padding:8px 12px;background:#1c2333;border-radius:5px;border:1px solid #253047;"></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm" id="tx-filter-all"   onclick="setTxFilter('all',this)"   style="color:#29d4e8;border-color:#29d4e8;">Все</button>
+      <button class="btn btn-ghost btn-sm" id="tx-filter-in"    onclick="setTxFilter('in',this)">↓ Входящие</button>
+      <button class="btn btn-ghost btn-sm" id="tx-filter-out"   onclick="setTxFilter('out',this)">↑ Исходящие</button>
+      <span style="margin-left:auto;font-size:11px;color:#3d5a78;align-self:center" id="tx-modal-count"></span>
+    </div>
+    <div id="tx-modal-body" style="overflow-y:auto;flex:1;">
+      <div class="empty-state"><div class="empty-icon">◎</div>Загрузка…</div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"><span id="toast-icon">✓</span><span id="toast-msg"></span></div>
 
 <script>
@@ -1617,6 +1635,7 @@ function renderWalletItem(w, projId, archived) {
       <div class="wallet-actions">
         ${!archived?`
           <button class="btn btn-ghost btn-xs" onclick="refreshSingleBalance('${w.id}','${projId}')">↻</button>
+          <button class="btn btn-ghost btn-xs" onclick="openTxModal('${w.id}','${projId}')">◎ История</button>
           ${currentRole && currentRole.canWithdraw ? `<button class="btn btn-outline btn-xs" onclick="openModalWithdraw('${w.id}','${projId}')">↑ Вывод</button>` : ''}
           ${!w.enrolled?`<button class="btn btn-ghost btn-xs" onclick="enrollWalletGF('${w.id}','${projId}')">⚡ GF статус</button>`:''}
           <button class="btn btn-ghost btn-xs" onclick="archiveWallet('${w.id}','${projId}')">Архив</button>
@@ -1626,6 +1645,119 @@ function renderWalletItem(w, projId, archived) {
       </div>
     </div>
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TX HISTORY MODAL
+// ═══════════════════════════════════════════════════════════════
+let txModalWallet = null;
+let txModalAllTxs = [];
+let txModalFilter = 'all';
+
+async function openTxModal(wid, projId) {
+  const w = DB[projId].active.find(x=>x.id===wid) || DB[projId].archived.find(x=>x.id===wid);
+  if (!w) return;
+  txModalWallet = w;
+  txModalFilter = 'all';
+
+  // Use GasFree address for history if available
+  const queryAddr = w.gasFreeAddr || w.addr;
+
+  document.getElementById('tx-modal-title').textContent = `История · ${escHtml(w.label || w.addr.substring(0,12)+'…')}`;
+  document.getElementById('tx-modal-addr').textContent = queryAddr;
+  document.getElementById('tx-modal-body').innerHTML = '<div class="empty-state"><div class="empty-icon" style="animation:spin .8s linear infinite;display:inline-block">↻</div>Загрузка транзакций…</div>';
+  document.getElementById('tx-modal-count').textContent = '';
+
+  // Reset filter buttons
+  ['all','in','out'].forEach(f => {
+    const btn = document.getElementById('tx-filter-'+f);
+    btn.style.color = f==='all' ? '#29d4e8' : '';
+    btn.style.borderColor = f==='all' ? '#29d4e8' : '';
+  });
+
+  document.getElementById('tx-modal').classList.add('open');
+
+  // Fetch
+  try {
+    const txs = await fetchTxHistory(queryAddr);
+    txModalAllTxs = txs;
+    renderTxTable();
+    if (txs.length === 0) {
+      document.getElementById('tx-modal-body').innerHTML = '<div class="empty-state"><div class="empty-icon">◎</div>Транзакций не найдено</div>';
+    }
+  } catch(e) {
+    document.getElementById('tx-modal-body').innerHTML = `<div class="err-box"><span>✕</span><span>Ошибка загрузки: ${escHtml(e.message)}</span></div>`;
+  }
+}
+
+function setTxFilter(filter, btn) {
+  txModalFilter = filter;
+  ['all','in','out'].forEach(f => {
+    const b = document.getElementById('tx-filter-'+f);
+    b.style.color = f===filter ? '#29d4e8' : '';
+    b.style.borderColor = f===filter ? '#29d4e8' : '';
+  });
+  renderTxTable();
+}
+
+function renderTxTable() {
+  const filtered = txModalFilter === 'all'
+    ? txModalAllTxs
+    : txModalAllTxs.filter(tx => tx.type === txModalFilter);
+
+  document.getElementById('tx-modal-count').textContent = `${filtered.length} транзакций`;
+
+  if (filtered.length === 0) {
+    document.getElementById('tx-modal-body').innerHTML = '<div class="empty-state"><div class="empty-icon">◎</div>Нет транзакций по выбранному фильтру</div>';
+    return;
+  }
+
+  const rows = filtered.map(tx => `
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="font-size:15px;${tx.type==='in'?'color:#00e676':'color:#ff3b5c'}">${tx.type==='in'?'↓':'↑'}</span>
+          <div>
+            <div style="font-size:10px;font-weight:700;${tx.type==='in'?'color:#00e676':'color:#ff3b5c'}">${tx.type==='in'?'Входящая':'Исходящая'}</div>
+            <div style="font-size:10px;color:#3d5a78">${escHtml(tx.time)}</div>
+          </div>
+        </div>
+      </td>
+      <td style="font-family:'Space Mono',monospace;font-weight:700;${tx.type==='in'?'color:#00e676':'color:#ff3b5c'}">
+        ${tx.type==='in'?'+':'−'}${fmt(tx.amount)} USDT
+      </td>
+      <td>
+        <div style="font-size:10px;color:#7a9bb8;font-weight:700;margin-bottom:2px">${tx.type==='in'?'От:':'Кому:'}</div>
+        <div style="font-family:'Space Mono',monospace;font-size:10px;color:#29d4e8;word-break:break-all">${escHtml(tx.type==='in'?(tx.from||'—'):(tx.to||'—'))}</div>
+      </td>
+      <td>
+        <a href="https://tronscan.org/#/transaction/${escHtml(tx.hash)}" target="_blank"
+           style="font-family:'Space Mono',monospace;font-size:10px;color:#29d4e8;text-decoration:none;display:flex;align-items:center;gap:4px;white-space:nowrap">
+          ${escHtml(tx.hash.substring(0,10))}…
+          <span style="font-size:10px;opacity:.6">↗</span>
+        </a>
+      </td>
+      <td>
+        ${tx.status==='confirmed'
+          ? '<span class="badge badge-green">✓</span>'
+          : '<span class="badge badge-yellow">⏳</span>'}
+      </td>
+    </tr>
+  `).join('');
+
+  document.getElementById('tx-modal-body').innerHTML = `
+    <div class="table-wrap">
+      <table class="tx-table">
+        <thead><tr>
+          <th>Тип / Время</th>
+          <th>Сумма</th>
+          <th>Адрес</th>
+          <th>TX Hash</th>
+          <th>Статус</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════
