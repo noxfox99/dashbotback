@@ -192,177 +192,177 @@
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { height:100%; }
-body { background:#07090d; color:#dde8f5; font-family:'Syne',sans-serif; overflow:hidden; height:100vh; }
-body::before { content:''; position:fixed; inset:0; background-image:linear-gradient(rgba(0,229,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.025) 1px,transparent 1px); background-size:44px 44px; pointer-events:none; z-index:0; }
-body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px; height:700px; background:radial-gradient(circle,rgba(0,229,255,0.055) 0%,transparent 65%); pointer-events:none; z-index:0; }
+body { background:#0f1117; color:#c8d8ed; font-family:'Syne',sans-serif; overflow:hidden; height:100vh; }
+body::before { content:''; position:fixed; inset:0; background-image:linear-gradient(rgba(41,212,232,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(41,212,232,0.03) 1px,transparent 1px); background-size:44px 44px; pointer-events:none; z-index:0; }
+body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px; height:700px; background:radial-gradient(circle,rgba(41,212,232,0.07) 0%,transparent 65%); pointer-events:none; z-index:0; }
 .layout { position:relative; z-index:1; display:grid; grid-template-columns:200px 1fr; grid-template-rows:54px 1fr; height:100vh; overflow:hidden; }
-.topbar { grid-column:1/-1; display:flex; align-items:center; padding:0 20px; gap:14px; background:rgba(7,9,13,0.97); border-bottom:1px solid #1a2535; backdrop-filter:blur(16px); z-index:10; }
-.logo { display:flex; align-items:center; gap:9px; font-weight:800; font-size:17px; letter-spacing:-0.3px; color:#00e5ff; text-shadow:0 0 24px rgba(0,229,255,0.22); }
-.logo-hex { width:26px; height:26px; background:#00e5ff; clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%); animation:pulse-hex 3s ease-in-out infinite; flex-shrink:0; }
+.topbar { grid-column:1/-1; display:flex; align-items:center; padding:0 20px; gap:14px; background:rgba(7,9,13,0.97); border-bottom:1px solid #253047; backdrop-filter:blur(16px); z-index:10; }
+.logo { display:flex; align-items:center; gap:9px; font-weight:800; font-size:17px; letter-spacing:-0.3px; color:#29d4e8; text-shadow:0 0 24px rgba(0,229,255,0.22); }
+.logo-hex { width:26px; height:26px; background:#29d4e8; clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%); animation:pulse-hex 3s ease-in-out infinite; flex-shrink:0; }
 @keyframes pulse-hex { 0%,100%{box-shadow:0 0 8px rgba(0,229,255,.5)} 50%{box-shadow:0 0 22px rgba(0,229,255,.9)} }
-.topbar-sep { width:1px; height:22px; background:#22304a; margin:0 4px; }
-.topbar-nav-btn { padding:5px 13px; border-radius:5px; font-size:12px; font-weight:700; color:#6e8fad; cursor:pointer; border:1px solid transparent; transition:all .2s; white-space:nowrap; }
-.topbar-nav-btn:hover { color:#dde8f5; }
-.topbar-nav-btn.active { color:#00e5ff; background:rgba(0,229,255,0.07); border-color:rgba(0,229,255,.18); }
+.topbar-sep { width:1px; height:22px; background:#2d3d5a; margin:0 4px; }
+.topbar-nav-btn { padding:5px 13px; border-radius:5px; font-size:12px; font-weight:700; color:#7a9bb8; cursor:pointer; border:1px solid transparent; transition:all .2s; white-space:nowrap; }
+.topbar-nav-btn:hover { color:#c8d8ed; }
+.topbar-nav-btn.active { color:#29d4e8; background:rgba(41,212,232,0.09); border-color:rgba(0,229,255,.18); }
 .topbar-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
-.net-pill { display:flex; align-items:center; gap:6px; font-family:'Space Mono',monospace; font-size:10px; color:#6e8fad; background:#0c1018; border:1px solid #1a2535; border-radius:4px; padding:5px 11px; }
+.net-pill { display:flex; align-items:center; gap:6px; font-family:'Space Mono',monospace; font-size:10px; color:#7a9bb8; background:#161b26; border:1px solid #253047; border-radius:4px; padding:5px 11px; }
 .net-dot { width:5px; height:5px; border-radius:50%; background:#00e676; animation:blink 2s infinite; }
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
-.refresh-btn-top { display:flex; align-items:center; gap:6px; padding:6px 14px; border-radius:5px; font-size:12px; font-weight:700; cursor:pointer; border:1px solid rgba(0,229,255,.3); background:rgba(0,229,255,0.07); color:#00e5ff; transition:all .2s; font-family:'Syne',sans-serif; }
-.refresh-btn-top:hover { background:rgba(0,229,255,.14); border-color:#00e5ff; box-shadow:0 0 24px rgba(0,229,255,0.22); }
+.refresh-btn-top { display:flex; align-items:center; gap:6px; padding:6px 14px; border-radius:5px; font-size:12px; font-weight:700; cursor:pointer; border:1px solid rgba(0,229,255,.3); background:rgba(41,212,232,0.09); color:#29d4e8; transition:all .2s; font-family:'Syne',sans-serif; }
+.refresh-btn-top:hover { background:rgba(0,229,255,.14); border-color:#29d4e8; box-shadow:0 0 24px rgba(0,229,255,0.22); }
 .refresh-btn-top.spinning .ri { animation:spin .6s linear infinite; display:inline-block; }
 @keyframes spin{to{transform:rotate(360deg)}}
-.sidebar { background:#0c1018; border-right:1px solid #1a2535; padding:16px 0; overflow-y:auto; display:flex; flex-direction:column; gap:1px; }
-.sidebar::-webkit-scrollbar{width:3px} .sidebar::-webkit-scrollbar-thumb{background:#22304a;border-radius:2px}
-.sidebar-section { padding:10px 16px 5px; font-size:9px; font-weight:700; letter-spacing:2px; color:#334d66; text-transform:uppercase; }
-.nav-item { display:flex; align-items:center; gap:9px; padding:9px 16px; font-size:12px; font-weight:700; color:#6e8fad; cursor:pointer; transition:all .18s; border-left:2px solid transparent; }
-.nav-item:hover { color:#dde8f5; background:rgba(255,255,255,.03); }
-.nav-item.active { color:#00e5ff; background:rgba(0,229,255,0.07); border-left-color:#00e5ff; }
+.sidebar { background:#161b26; border-right:1px solid #253047; padding:16px 0; overflow-y:auto; display:flex; flex-direction:column; gap:1px; }
+.sidebar::-webkit-scrollbar{width:3px} .sidebar::-webkit-scrollbar-thumb{background:#2d3d5a;border-radius:2px}
+.sidebar-section { padding:10px 16px 5px; font-size:9px; font-weight:700; letter-spacing:2px; color:#3d5a78; text-transform:uppercase; }
+.nav-item { display:flex; align-items:center; gap:9px; padding:9px 16px; font-size:12px; font-weight:700; color:#7a9bb8; cursor:pointer; transition:all .18s; border-left:2px solid transparent; }
+.nav-item:hover { color:#c8d8ed; background:rgba(255,255,255,.03); }
+.nav-item.active { color:#29d4e8; background:rgba(41,212,232,0.09); border-left-color:#29d4e8; }
 .nav-icon { font-size:13px; width:16px; text-align:center; flex-shrink:0; }
 .sidebar-spacer { flex:1; }
-.sidebar-ver { padding:10px 16px; font-family:'Space Mono',monospace; font-size:9px; color:#334d66; }
-.main { overflow-y:auto; background:#07090d; }
-.main::-webkit-scrollbar{width:4px} .main::-webkit-scrollbar-thumb{background:#22304a;border-radius:2px}
+.sidebar-ver { padding:10px 16px; font-family:'Space Mono',monospace; font-size:9px; color:#3d5a78; }
+.main { overflow-y:auto; background:#0f1117; }
+.main::-webkit-scrollbar{width:4px} .main::-webkit-scrollbar-thumb{background:#2d3d5a;border-radius:2px}
 .page { display:none; padding:24px; flex-direction:column; gap:20px; min-height:100%; }
 .page.active { display:flex; }
 .page-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
 .page-title { font-size:20px; font-weight:800; letter-spacing:-.4px; }
-.page-sub { font-size:12px; color:#6e8fad; margin-top:3px; }
+.page-sub { font-size:12px; color:#7a9bb8; margin-top:3px; }
 .page-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-.proj-tabs-wrap { background:#0c1018; border:1px solid #1a2535; border-radius:8px; overflow:hidden; }
-.proj-tabs-bar { display:flex; border-bottom:1px solid #1a2535; background:#101620; overflow-x:auto; }
-.proj-tabs-bar::-webkit-scrollbar{height:2px} .proj-tabs-bar::-webkit-scrollbar-thumb{background:#22304a}
-.proj-tab { padding:12px 22px; font-size:12px; font-weight:700; color:#6e8fad; cursor:pointer; white-space:nowrap; border-right:1px solid #1a2535; transition:all .18s; position:relative; letter-spacing:.5px; }
-.proj-tab:hover { color:#dde8f5; background:rgba(255,255,255,.03); }
-.proj-tab.active { color:#00e5ff; background:#0c1018; }
-.proj-tab.active::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background:#00e5ff; box-shadow:0 0 8px rgba(0,229,255,.6); }
+.proj-tabs-wrap { background:#161b26; border:1px solid #253047; border-radius:8px; overflow:hidden; }
+.proj-tabs-bar { display:flex; border-bottom:1px solid #253047; background:#1c2333; overflow-x:auto; }
+.proj-tabs-bar::-webkit-scrollbar{height:2px} .proj-tabs-bar::-webkit-scrollbar-thumb{background:#2d3d5a}
+.proj-tab { padding:12px 22px; font-size:12px; font-weight:700; color:#7a9bb8; cursor:pointer; white-space:nowrap; border-right:1px solid #253047; transition:all .18s; position:relative; letter-spacing:.5px; }
+.proj-tab:hover { color:#c8d8ed; background:rgba(255,255,255,.03); }
+.proj-tab.active { color:#29d4e8; background:#161b26; }
+.proj-tab.active::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background:#29d4e8; box-shadow:0 0 8px rgba(0,229,255,.6); }
 .proj-tab-count { display:inline-flex; align-items:center; justify-content:center; min-width:16px; height:16px; border-radius:8px; font-size:9px; background:rgba(0,229,255,.15); color:#00b8cc; margin-left:7px; padding:0 4px; }
 .proj-panel { display:none; }
 .proj-panel.active { display:block; }
-.card { background:#0c1018; border:1px solid #1a2535; border-radius:8px; padding:20px; position:relative; overflow:hidden; }
+.card { background:#161b26; border:1px solid #253047; border-radius:8px; padding:20px; position:relative; overflow:hidden; }
 .card::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,rgba(0,229,255,.25),transparent); }
 .card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:8px; }
-.card-title { font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:#334d66; }
+.card-title { font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:#3d5a78; }
 .inner-tabs { display:flex; gap:2px; }
-.inner-tab { padding:5px 14px; font-size:11px; font-weight:700; border-radius:4px; cursor:pointer; color:#6e8fad; transition:all .15s; border:1px solid transparent; }
-.inner-tab:hover { color:#dde8f5; }
-.inner-tab.active { color:#00e5ff; background:rgba(0,229,255,0.07); border-color:rgba(0,229,255,.18); }
+.inner-tab { padding:5px 14px; font-size:11px; font-weight:700; border-radius:4px; cursor:pointer; color:#7a9bb8; transition:all .15s; border:1px solid transparent; }
+.inner-tab:hover { color:#c8d8ed; }
+.inner-tab.active { color:#29d4e8; background:rgba(41,212,232,0.09); border-color:rgba(0,229,255,.18); }
 .inner-panel { display:none; }
 .inner-panel.active { display:block; }
 .wallet-list { display:flex; flex-direction:column; gap:10px; margin-top:4px; }
-.wallet-item { background:#101620; border:1px solid #1a2535; border-radius:8px; padding:14px 16px; display:grid; grid-template-columns:1fr auto; gap:8px; align-items:start; transition:border-color .2s; }
-.wallet-item:hover { border-color:#22304a; }
+.wallet-item { background:#1c2333; border:1px solid #253047; border-radius:8px; padding:14px 16px; display:grid; grid-template-columns:1fr auto; gap:8px; align-items:start; transition:border-color .2s; }
+.wallet-item:hover { border-color:#2d3d5a; }
 .wallet-item.archived { opacity:.6; filter:saturate(0.5); }
-.wallet-addr { font-family:'Space Mono',monospace; font-size:11px; color:#00e5ff; word-break:break-all; line-height:1.5; cursor:pointer; }
+.wallet-addr { font-family:'Space Mono',monospace; font-size:11px; color:#29d4e8; word-break:break-all; line-height:1.5; cursor:pointer; }
 .wallet-addr:hover { color:#33eaff; text-decoration:underline; }
 .wallet-meta { display:flex; align-items:center; gap:8px; margin-top:5px; flex-wrap:wrap; }
-.wallet-tag { font-size:9px; font-weight:700; letter-spacing:1px; color:#334d66; text-transform:uppercase; }
+.wallet-tag { font-size:9px; font-weight:700; letter-spacing:1px; color:#3d5a78; text-transform:uppercase; }
 .wallet-balance { font-family:'Space Mono',monospace; font-size:15px; font-weight:700; color:#00e676; text-align:right; white-space:nowrap; }
-.wallet-balance.zero { color:#6e8fad; }
-.wallet-balance.loading { color:#334d66; }
-.wallet-balance-usd { font-size:10px; color:#334d66; text-align:right; margin-top:2px; font-family:'Space Mono',monospace; }
+.wallet-balance.zero { color:#7a9bb8; }
+.wallet-balance.loading { color:#3d5a78; }
+.wallet-balance-usd { font-size:10px; color:#3d5a78; text-align:right; margin-top:2px; font-family:'Space Mono',monospace; }
 .wallet-actions { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; justify-content:flex-end; }
 .tx-table { width:100%; border-collapse:collapse; }
-.tx-table th { text-align:left; font-size:9px; font-weight:700; letter-spacing:1.5px; color:#334d66; text-transform:uppercase; padding:8px 10px; border-bottom:1px solid #1a2535; }
+.tx-table th { text-align:left; font-size:9px; font-weight:700; letter-spacing:1.5px; color:#3d5a78; text-transform:uppercase; padding:8px 10px; border-bottom:1px solid #253047; }
 .tx-table td { padding:10px 10px; font-size:11px; border-bottom:1px solid rgba(26,37,53,.5); vertical-align:middle; }
 .tx-table tr:last-child td { border-bottom:none; }
 .tx-table tr:hover td { background:rgba(255,255,255,.015); }
 .tx-hash-cell { font-family:'Space Mono',monospace; color:#00b8cc; }
 .tx-hash-cell a { color:inherit; text-decoration:none; }
-.tx-hash-cell a:hover { color:#00e5ff; text-decoration:underline; }
+.tx-hash-cell a:hover { color:#29d4e8; text-decoration:underline; }
 .tx-amount-out { font-family:'Space Mono',monospace; font-weight:700; color:#ff3b5c; }
 .tx-amount-in { font-family:'Space Mono',monospace; font-weight:700; color:#00e676; }
-.tx-time-cell { font-family:'Space Mono',monospace; font-size:10px; color:#334d66; white-space:nowrap; }
+.tx-time-cell { font-family:'Space Mono',monospace; font-size:10px; color:#3d5a78; white-space:nowrap; }
 .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
-.stat-box { background:#101620; border:1px solid #1a2535; border-radius:8px; padding:14px 16px; }
-.stat-lbl { font-size:9px; font-weight:700; letter-spacing:1.5px; color:#334d66; text-transform:uppercase; margin-bottom:6px; }
+.stat-box { background:#1c2333; border:1px solid #253047; border-radius:8px; padding:14px 16px; }
+.stat-lbl { font-size:9px; font-weight:700; letter-spacing:1.5px; color:#3d5a78; text-transform:uppercase; margin-bottom:6px; }
 .stat-val { font-family:'Space Mono',monospace; font-size:20px; font-weight:700; }
-.stat-sub { font-size:10px; color:#6e8fad; margin-top:3px; }
-.c-tron{color:#00e5ff} .c-green{color:#00e676} .c-red{color:#ff3b5c} .c-yellow{color:#ffd600}
+.stat-sub { font-size:10px; color:#7a9bb8; margin-top:3px; }
+.c-tron{color:#29d4e8} .c-green{color:#00e676} .c-red{color:#ff3b5c} .c-yellow{color:#ffd600}
 .btn { display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:9px 18px; border-radius:5px; font-family:'Syne',sans-serif; font-weight:700; font-size:12px; cursor:pointer; border:none; transition:all .18s; white-space:nowrap; letter-spacing:.3px; }
-.btn-primary { background:#00e5ff; color:#000; }
+.btn-primary { background:#29d4e8; color:#000; }
 .btn-primary:hover { background:#2aebff; box-shadow:0 0 18px rgba(0,229,255,.4); transform:translateY(-1px); }
 .btn-primary:active { transform:translateY(0); }
-.btn-primary:disabled { background:#162430; color:#334d66; cursor:not-allowed; transform:none; box-shadow:none; }
-.btn-outline { background:transparent; color:#00e5ff; border:1px solid rgba(0,229,255,.35); }
-.btn-outline:hover { background:rgba(0,229,255,0.07); border-color:#00e5ff; }
-.btn-ghost { background:transparent; color:#6e8fad; border:1px solid #1a2535; }
-.btn-ghost:hover { color:#dde8f5; border-color:#22304a; }
+.btn-primary:disabled { background:#162430; color:#3d5a78; cursor:not-allowed; transform:none; box-shadow:none; }
+.btn-outline { background:transparent; color:#29d4e8; border:1px solid rgba(0,229,255,.35); }
+.btn-outline:hover { background:rgba(41,212,232,0.09); border-color:#29d4e8; }
+.btn-ghost { background:transparent; color:#7a9bb8; border:1px solid #253047; }
+.btn-ghost:hover { color:#c8d8ed; border-color:#2d3d5a; }
 .btn-danger { background:rgba(255,59,92,.1); color:#ff3b5c; border:1px solid rgba(255,59,92,.25); }
 .btn-danger:hover { background:rgba(255,59,92,.18); border-color:#ff3b5c; }
 .btn-sm { padding:5px 11px; font-size:11px; }
 .btn-xs { padding:3px 8px; font-size:10px; }
 .form-group { display:flex; flex-direction:column; gap:5px; }
-.form-label { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#6e8fad; }
-.form-input { background:#0c1018; border:1px solid #1a2535; border-radius:5px; padding:9px 12px; font-family:'Space Mono',monospace; font-size:12px; color:#dde8f5; width:100%; outline:none; transition:border-color .18s; }
+.form-label { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#7a9bb8; }
+.form-input { background:#161b26; border:1px solid #253047; border-radius:5px; padding:9px 12px; font-family:'Space Mono',monospace; font-size:12px; color:#c8d8ed; width:100%; outline:none; transition:border-color .18s; }
 .form-input:focus { border-color:rgba(0,229,255,.4); box-shadow:0 0 0 3px rgba(0,229,255,.06); }
-.form-input::placeholder { color:#334d66; }
-.form-hint { font-size:10px; color:#334d66; }
+.form-input::placeholder { color:#3d5a78; }
+.form-hint { font-size:10px; color:#3d5a78; }
 .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:100px; font-size:9px; font-weight:700; letter-spacing:.5px; }
 .badge-green { background:rgba(0,230,118,.1); color:#00e676; border:1px solid rgba(0,230,118,.2); }
-.badge-blue { background:rgba(0,229,255,.1); color:#00e5ff; border:1px solid rgba(0,229,255,.2); }
+.badge-blue { background:rgba(0,229,255,.1); color:#29d4e8; border:1px solid rgba(0,229,255,.2); }
 .badge-yellow { background:rgba(255,214,0,.1); color:#ffd600; border:1px solid rgba(255,214,0,.2); }
 .badge-red { background:rgba(255,59,92,.1); color:#ff3b5c; border:1px solid rgba(255,59,92,.2); }
-.badge-gray { background:rgba(255,255,255,.05); color:#6e8fad; border:1px solid #1a2535; }
+.badge-gray { background:rgba(255,255,255,.05); color:#7a9bb8; border:1px solid #253047; }
 .info-box { background:rgba(0,229,255,.05); border:1px solid rgba(0,229,255,.13); border-radius:6px; padding:10px 13px; display:flex; gap:10px; align-items:flex-start; font-size:11px; color:#00b8cc; line-height:1.5; }
 .warn-box { background:rgba(255,214,0,.05); border:1px solid rgba(255,214,0,.2); border-radius:6px; padding:10px 13px; display:flex; gap:10px; align-items:flex-start; font-size:11px; color:#c9a800; line-height:1.5; }
 .err-box { background:rgba(255,59,92,.05); border:1px solid rgba(255,59,92,.2); border-radius:6px; padding:10px 13px; display:flex; gap:10px; align-items:flex-start; font-size:11px; color:#ff3b5c; line-height:1.5; word-break:break-word; }
-.divider { height:1px; background:#1a2535; }
+.divider { height:1px; background:#253047; }
 .key-blurred { filter:blur(5px); transition:filter .25s; user-select:none; }
 .key-blurred.show { filter:blur(0); user-select:text; }
-.copy-btn { background:none; border:1px solid #22304a; color:#6e8fad; padding:3px 9px; border-radius:4px; font-size:10px; cursor:pointer; font-family:'Space Mono',monospace; white-space:nowrap; transition:all .15s; }
-.copy-btn:hover { border-color:#00e5ff; color:#00e5ff; }
-.empty-state { text-align:center; padding:36px 20px; color:#334d66; font-size:12px; }
+.copy-btn { background:none; border:1px solid #2d3d5a; color:#7a9bb8; padding:3px 9px; border-radius:4px; font-size:10px; cursor:pointer; font-family:'Space Mono',monospace; white-space:nowrap; transition:all .15s; }
+.copy-btn:hover { border-color:#29d4e8; color:#29d4e8; }
+.empty-state { text-align:center; padding:36px 20px; color:#3d5a78; font-size:12px; }
 .empty-icon { font-size:28px; margin-bottom:10px; opacity:.4; }
-.config-row { display:flex; align-items:center; justify-content:space-between; padding:13px 0; border-bottom:1px solid #1a2535; gap:16px; }
+.config-row { display:flex; align-items:center; justify-content:space-between; padding:13px 0; border-bottom:1px solid #253047; gap:16px; }
 .config-row:last-child { border-bottom:none; }
 .config-lbl { font-size:12px; font-weight:600; }
-.config-desc { font-size:10px; color:#6e8fad; margin-top:2px; }
-.toggle { width:38px; height:20px; background:#1a2535; border-radius:100px; position:relative; cursor:pointer; transition:background .2s; flex-shrink:0; }
-.toggle.on { background:#00e5ff; }
+.config-desc { font-size:10px; color:#7a9bb8; margin-top:2px; }
+.toggle { width:38px; height:20px; background:#253047; border-radius:100px; position:relative; cursor:pointer; transition:background .2s; flex-shrink:0; }
+.toggle.on { background:#29d4e8; }
 .toggle::after { content:''; position:absolute; width:14px; height:14px; border-radius:50%; background:#fff; top:3px; left:3px; transition:transform .2s; }
 .toggle.on::after { transform:translateX(18px); }
 .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:200; align-items:center; justify-content:center; backdrop-filter:blur(5px); }
 .modal-overlay.open { display:flex; }
-.modal { background:#0c1018; border:1px solid #1a2535; border-radius:10px; padding:24px; width:500px; max-width:95vw; position:relative; animation:modal-in .22s ease; max-height:90vh; overflow-y:auto; }
+.modal { background:#161b26; border:1px solid #253047; border-radius:10px; padding:24px; width:500px; max-width:95vw; position:relative; animation:modal-in .22s ease; max-height:90vh; overflow-y:auto; }
 @keyframes modal-in { from{opacity:0;transform:scale(.94) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
-.modal-close { position:absolute; top:14px; right:14px; background:none; border:none; color:#6e8fad; font-size:18px; cursor:pointer; padding:3px 7px; border-radius:3px; transition:color .15s; }
-.modal-close:hover { color:#dde8f5; }
+.modal-close { position:absolute; top:14px; right:14px; background:none; border:none; color:#7a9bb8; font-size:18px; cursor:pointer; padding:3px 7px; border-radius:3px; transition:color .15s; }
+.modal-close:hover { color:#c8d8ed; }
 .modal-title { font-size:15px; font-weight:800; margin-bottom:18px; }
-.toast { position:fixed; bottom:20px; right:20px; background:#101620; border:1px solid #1a2535; border-radius:7px; padding:12px 16px; font-size:12px; font-weight:700; z-index:500; display:flex; align-items:center; gap:9px; transform:translateY(70px); opacity:0; transition:all .28s cubic-bezier(.34,1.56,.64,1); min-width:220px; box-shadow:0 6px 24px rgba(0,0,0,.5); }
+.toast { position:fixed; bottom:20px; right:20px; background:#1c2333; border:1px solid #253047; border-radius:7px; padding:12px 16px; font-size:12px; font-weight:700; z-index:500; display:flex; align-items:center; gap:9px; transform:translateY(70px); opacity:0; transition:all .28s cubic-bezier(.34,1.56,.64,1); min-width:220px; box-shadow:0 6px 24px rgba(0,0,0,.5); }
 .toast.show { transform:translateY(0); opacity:1; }
 .toast.success { border-color:rgba(0,230,118,.35); }
 .toast.error { border-color:rgba(255,59,92,.35); }
 .spin-el { display:inline-block; width:12px; height:12px; border:2px solid rgba(0,0,0,.25); border-top-color:#000; border-radius:50%; animation:spin .55s linear infinite; vertical-align:middle; }
-.spin-el-light { display:inline-block; width:12px; height:12px; border:2px solid rgba(0,229,255,.2); border-top-color:#00e5ff; border-radius:50%; animation:spin .55s linear infinite; vertical-align:middle; }
+.spin-el-light { display:inline-block; width:12px; height:12px; border:2px solid rgba(0,229,255,.2); border-top-color:#29d4e8; border-radius:50%; animation:spin .55s linear infinite; vertical-align:middle; }
 .table-wrap { overflow-x:auto; }
-.table-wrap::-webkit-scrollbar{height:3px} .table-wrap::-webkit-scrollbar-thumb{background:#22304a;border-radius:2px}
+.table-wrap::-webkit-scrollbar{height:3px} .table-wrap::-webkit-scrollbar-thumb{background:#2d3d5a;border-radius:2px}
 @media(max-width:800px){ .layout{grid-template-columns:1fr;grid-template-rows:54px auto 1fr} .sidebar{display:none} .stats-row{grid-template-columns:1fr 1fr} .form-row{grid-template-columns:1fr} }
 
 /* ── AUTH ───────────────────────────────────────────────────── */
 .auth-overlay {
   position:fixed; inset:0; z-index:9999;
-  background:#07090d;
+  background:#0f1117;
   display:flex; align-items:center; justify-content:center;
 }
 .auth-box {
-  background:#0c1018; border:1px solid #1a2535; border-radius:12px;
+  background:#161b26; border:1px solid #253047; border-radius:12px;
   padding:40px 36px; width:360px; max-width:95vw;
   display:flex; flex-direction:column; gap:20px;
   animation:modal-in .25s ease;
 }
 .auth-logo {
   display:flex; align-items:center; gap:10px;
-  font-weight:800; font-size:20px; color:#00e5ff;
+  font-weight:800; font-size:20px; color:#29d4e8;
   text-shadow:0 0 24px rgba(0,229,255,0.3);
   justify-content:center; margin-bottom:4px;
 }
 .auth-logo-hex {
-  width:28px; height:28px; background:#00e5ff; flex-shrink:0;
+  width:28px; height:28px; background:#29d4e8; flex-shrink:0;
   clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
 }
-.auth-title { font-size:13px; color:#6e8fad; text-align:center; margin-top:-8px; }
+.auth-title { font-size:13px; color:#7a9bb8; text-align:center; margin-top:-8px; }
 .auth-error {
   background:rgba(255,59,92,.1); border:1px solid rgba(255,59,92,.25);
   border-radius:6px; padding:10px 13px; font-size:12px; color:#ff3b5c;
@@ -371,7 +371,7 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
 .auth-error.show { display:block; }
 .auth-user-label {
   font-size:10px; font-weight:700; letter-spacing:1.5px;
-  color:#334d66; text-transform:uppercase; margin-bottom:4px;
+  color:#3d5a78; text-transform:uppercase; margin-bottom:4px;
 }
 </style>
 </head>
@@ -381,21 +381,17 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
   <div class="auth-box">
     <div class="auth-logo"><div class="auth-logo-hex"></div>TRONGF</div>
     <div class="auth-title">Панель управления · Вход</div>
-    <div id="auth-error" class="auth-error">Неверный пароль</div>
-    <div>
-      <div class="auth-user-label">Пользователь</div>
-      <select class="form-input" id="auth-user">
-        <option value="admin">Super Admin</option>
-        <option value="mull">Mull (Tab 1)</option>
-        <option value="time">Time (Tab 2)</option>
-        <option value="sov">Sov (Tab 3)</option>
-        <option value="rail">Rail (Tab 4)</option>
-        <option value="temp">Temp (Tab 5)</option>
-      </select>
+    <div id="auth-error" class="auth-error">Неверный логин или пароль</div>
+    <div class="form-group">
+      <label class="form-label">Логин</label>
+      <input type="text" class="form-input" id="auth-user" placeholder="Введите логин…"
+             autocomplete="username"
+             onkeydown="if(event.key==='Enter')document.getElementById('auth-pass').focus()"/>
     </div>
     <div class="form-group">
       <label class="form-label">Пароль</label>
       <input type="password" class="form-input" id="auth-pass" placeholder="Введите пароль…"
+             autocomplete="current-password"
              onkeydown="if(event.key==='Enter')doLogin()"/>
     </div>
     <button class="btn btn-primary" onclick="doLogin()">→ Войти</button>
@@ -446,7 +442,7 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
     <div class="stats-row" id="global-stats">
       <div class="stat-box"><div class="stat-lbl">Всего USDT</div><div class="stat-val c-tron" id="gstat-total">—</div><div class="stat-sub">Суммарный баланс</div></div>
       <div class="stat-box"><div class="stat-lbl">Активных</div><div class="stat-val c-green" id="gstat-active">0</div><div class="stat-sub">Кошельков в работе</div></div>
-      <div class="stat-box"><div class="stat-lbl">В архиве</div><div class="stat-val" style="color:#6e8fad" id="gstat-archived">0</div><div class="stat-sub">Деактивировано</div></div>
+      <div class="stat-box"><div class="stat-lbl">В архиве</div><div class="stat-val" style="color:#7a9bb8" id="gstat-archived">0</div><div class="stat-sub">Деактивировано</div></div>
       <div class="stat-box"><div class="stat-lbl">Транзакций</div><div class="stat-val c-yellow" id="gstat-tx">0</div><div class="stat-sub">За всё время</div></div>
     </div>
     <div class="proj-tabs-wrap">
@@ -497,17 +493,17 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
         <div class="card">
           <div class="card-head"><div class="card-title">Провайдер GasFree</div></div>
           <div style="font-size:11px;display:flex;flex-direction:column;gap:8px" id="provider-info">
-            <div style="color:#334d66">Загрузка провайдеров…</div>
+            <div style="color:#3d5a78">Загрузка провайдеров…</div>
           </div>
         </div>
         <div class="card">
           <div class="card-head"><div class="card-title">Оценка комиссии</div></div>
           <div style="font-size:12px;display:flex;flex-direction:column;gap:9px">
-            <div style="display:flex;justify-content:space-between"><span style="color:#6e8fad">USDT (GasFree)</span><span class="c-green" style="font-weight:700">~0–5 USDT</span></div>
-            <div style="display:flex;justify-content:space-between"><span style="color:#6e8fad">TRX энергия</span><span class="c-green">НЕ НУЖНА</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#7a9bb8">USDT (GasFree)</span><span class="c-green" style="font-weight:700">~0–5 USDT</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#7a9bb8">TRX энергия</span><span class="c-green">НЕ НУЖНА</span></div>
             <div class="divider"></div>
-            <div style="display:flex;justify-content:space-between"><span style="color:#6e8fad">Сеть</span><span id="fee-net">Mainnet</span></div>
-            <div style="display:flex;justify-content:space-between"><span style="color:#6e8fad">Протокол</span><span class="badge badge-green">GasFree v1</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#7a9bb8">Сеть</span><span id="fee-net">Mainnet</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#7a9bb8">Протокол</span><span class="badge badge-green">GasFree v1</span></div>
           </div>
         </div>
       </div>
@@ -611,8 +607,8 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
     <button class="modal-close" onclick="closeModal('gen-modal')">✕</button>
     <div class="modal-title" id="gen-modal-title">Новый Gas-Free кошелёк</div>
     <div style="display:flex;flex-direction:column;gap:14px">
-      <div style="display:flex;gap:4px;background:#101620;border-radius:6px;padding:3px;width:fit-content">
-        <button class="btn btn-sm" id="gen-tab-new" style="background:#0c1018;color:#00e5ff" onclick="setGenTab('new')">Создать новый</button>
+      <div style="display:flex;gap:4px;background:#1c2333;border-radius:6px;padding:3px;width:fit-content">
+        <button class="btn btn-sm" id="gen-tab-new" style="background:#161b26;color:#29d4e8" onclick="setGenTab('new')">Создать новый</button>
         <button class="btn btn-sm btn-ghost" id="gen-tab-imp" onclick="setGenTab('imp')">Импорт ключа</button>
       </div>
       <div id="gen-new-panel">
@@ -634,7 +630,7 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
         <div class="form-group">
           <label class="form-label">TRON Адрес (EOA)</label>
           <div style="display:flex;gap:8px;align-items:center">
-            <span id="gr-addr" style="font-family:'Space Mono',monospace;font-size:11px;color:#00e5ff;flex:1;word-break:break-all"></span>
+            <span id="gr-addr" style="font-family:'Space Mono',monospace;font-size:11px;color:#29d4e8;flex:1;word-break:break-all"></span>
             <button class="copy-btn" onclick="copyEl('gr-addr',this)">Копировать</button>
           </div>
         </div>
@@ -643,14 +639,14 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
             Приватный ключ <span class="badge badge-yellow" style="margin-left:8px">⚠ Секрет</span>
             <button class="btn btn-ghost btn-xs" style="margin-left:auto" onclick="if(guardKeys()) document.getElementById('gr-key').classList.toggle('show')">👁 Показать</button>
           </label>
-          <span id="gr-key" class="key-blurred" style="font-family:'Space Mono',monospace;font-size:11px;color:#ffd600;word-break:break-all;display:block;padding:10px 12px;background:#101620;border:1px solid #1a2535;border-radius:5px;line-height:1.6"></span>
+          <span id="gr-key" class="key-blurred" style="font-family:'Space Mono',monospace;font-size:11px;color:#ffd600;word-break:break-all;display:block;padding:10px 12px;background:#1c2333;border:1px solid #253047;border-radius:5px;line-height:1.6"></span>
           <button class="copy-btn" style="margin-top:4px;width:fit-content" onclick="if(guardKeys()) copyText(document.getElementById('gr-key').textContent,this)">Копировать ключ</button>
         </div>
         <div class="warn-box"><span>⚠</span><span>Сохраните приватный ключ офлайн в надёжном месте. Восстановление невозможно.</span></div>
         <div id="gen-gf-info" style="display:none;flex-direction:column;gap:6px">
           <div class="divider"></div>
-          <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#334d66;text-transform:uppercase">GasFree статус</div>
-          <div id="gen-gf-content" style="font-size:11px;color:#6e8fad"></div>
+          <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#3d5a78;text-transform:uppercase">GasFree статус</div>
+          <div id="gen-gf-content" style="font-size:11px;color:#7a9bb8"></div>
         </div>
       </div>
     </div>
@@ -663,9 +659,9 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
     <button class="modal-close" onclick="closeModal('wd-modal')">✕</button>
     <div class="modal-title">Вывод средств</div>
     <div style="display:flex;flex-direction:column;gap:13px">
-      <div style="background:#101620;border:1px solid #1a2535;border-radius:6px;padding:10px 12px">
-        <div style="font-size:10px;color:#334d66;margin-bottom:3px">ОТПРАВИТЕЛЬ</div>
-        <div id="mwd-from-addr" style="font-family:'Space Mono',monospace;font-size:11px;color:#00e5ff;word-break:break-all"></div>
+      <div style="background:#1c2333;border:1px solid #253047;border-radius:6px;padding:10px 12px">
+        <div style="font-size:10px;color:#3d5a78;margin-bottom:3px">ОТПРАВИТЕЛЬ</div>
+        <div id="mwd-from-addr" style="font-family:'Space Mono',monospace;font-size:11px;color:#29d4e8;word-break:break-all"></div>
         <div style="font-size:11px;color:#00e676;margin-top:4px" id="mwd-from-bal"></div>
       </div>
       <div class="form-group"><label class="form-label">Адрес получателя</label><input class="form-input" id="mwd-to" placeholder="T..."/></div>
@@ -726,7 +722,7 @@ const PERMIT_TYPES = {
 // STATE
 // ═══════════════════════════════════════════════════════════════
 const PROJECTS = [
-  { id:'mull', name:'Mull',  color:'#00e5ff' },
+  { id:'mull', name:'Mull',  color:'#29d4e8' },
   { id:'time', name:'Time',  color:'#00e676' },
   { id:'sov',  name:'Sov',   color:'#ffd600' },
   { id:'rail', name:'Rail',  color:'#ff9100' },
@@ -1061,12 +1057,12 @@ async function loadProviders() {
   try {
     const data = await gfGet('/config/provider/all');
     const list = data.data || data || [];
-    if(!list.length) { box.innerHTML = '<span style="color:#334d66">Провайдеры не найдены</span>'; return; }
+    if(!list.length) { box.innerHTML = '<span style="color:#3d5a78">Провайдеры не найдены</span>'; return; }
     box.innerHTML = list.map(p => `
-      <div style="padding:8px 0;border-bottom:1px solid #1a2535">
-        <div style="font-size:11px;font-weight:700;color:#dde8f5">${escHtml(p.name||'—')}</div>
-        <div style="font-family:\'Space Mono\',monospace;font-size:10px;color:#00e5ff;margin-top:2px;word-break:break-all">${escHtml(p.providerAddress||p.address||'')}</div>
-        <div style="font-size:10px;color:#6e8fad;margin-top:2px">Макс. комиссия: ${p.maxFee ? (p.maxFee/1e6)+' USDT' : '—'}</div>
+      <div style="padding:8px 0;border-bottom:1px solid #253047">
+        <div style="font-size:11px;font-weight:700;color:#c8d8ed">${escHtml(p.name||'—')}</div>
+        <div style="font-family:\'Space Mono\',monospace;font-size:10px;color:#29d4e8;margin-top:2px;word-break:break-all">${escHtml(p.providerAddress||p.address||'')}</div>
+        <div style="font-size:10px;color:#7a9bb8;margin-top:2px">Макс. комиссия: ${p.maxFee ? (p.maxFee/1e6)+' USDT' : '—'}</div>
       </div>
     `).join('');
   } catch(e) {
@@ -1142,8 +1138,8 @@ function setGenTab(tab) {
   document.getElementById('gen-imp-panel').style.display = tab==='imp'?'block':'none';
   const btnNew = document.getElementById('gen-tab-new');
   const btnImp = document.getElementById('gen-tab-imp');
-  btnNew.style.cssText = tab==='new' ? 'background:#0c1018;color:#00e5ff' : '';
-  btnImp.style.cssText = tab==='imp' ? 'background:#0c1018;color:#00e5ff' : '';
+  btnNew.style.cssText = tab==='new' ? 'background:#161b26;color:#29d4e8' : '';
+  btnImp.style.cssText = tab==='imp' ? 'background:#161b26;color:#29d4e8' : '';
   if(tab==='new') btnNew.className='btn btn-sm';
   else { btnNew.className='btn btn-sm btn-ghost'; btnImp.className='btn btn-sm'; }
 }
@@ -1223,11 +1219,11 @@ async function fetchGasFreeInfo(wallet, projId, showInModal = false) {
     if(showInModal) {
       const box = document.getElementById('gen-gf-info');
       document.getElementById('gen-gf-content').innerHTML = `
-        <div><span style="color:#334d66">GasFree адрес (для пополнения):</span></div>
-        <div style="font-family:'Space Mono',monospace;color:#00e5ff;font-size:10px;word-break:break-all;margin-top:3px">${escHtml(wallet.gasFreeAddr||'—')}</div>
+        <div><span style="color:#3d5a78">GasFree адрес (для пополнения):</span></div>
+        <div style="font-family:'Space Mono',monospace;color:#29d4e8;font-size:10px;word-break:break-all;margin-top:3px">${escHtml(wallet.gasFreeAddr||'—')}</div>
         <div style="font-size:10px;color:#ffd600;margin-top:6px">⚠ Отправляйте USDT на GasFree адрес, не на EOA адрес выше</div>
-        <div><span style="color:#334d66">Nonce:</span> <span style="font-family:'Space Mono',monospace">${wallet.nonce}</span></div>
-        <div><span style="color:#334d66">Статус:</span> <span class="badge badge-green">⚡ GasFree активен</span></div>
+        <div><span style="color:#3d5a78">Nonce:</span> <span style="font-family:'Space Mono',monospace">${wallet.nonce}</span></div>
+        <div><span style="color:#3d5a78">Статус:</span> <span class="badge badge-green">⚡ GasFree активен</span></div>
       `;
       box.style.display = 'flex';
     }
@@ -1386,8 +1382,8 @@ async function doGasFreeWithdraw() {
     document.getElementById('wd-result-box').innerHTML = `
       <div class="info-box" style="flex-direction:column;gap:6px">
         <div style="font-weight:700;color:#00e676">✓ Транзакция отправлена в GasFree relay</div>
-        <div><span style="color:#334d66">Trace ID:</span> <span style="font-family:\'Space Mono\',monospace;font-size:10px">${escHtml(String(traceId))}</span></div>
-        <div style="font-size:10px;color:#6e8fad">Статус появится на chain через несколько секунд</div>
+        <div><span style="color:#3d5a78">Trace ID:</span> <span style="font-family:\'Space Mono\',monospace;font-size:10px">${escHtml(String(traceId))}</span></div>
+        <div style="font-size:10px;color:#7a9bb8">Статус появится на chain через несколько секунд</div>
       </div>`;
     document.getElementById('wd-result-box').style.display = 'block';
 
@@ -1550,7 +1546,7 @@ function renderProjPanel(proj, isActive) {
     <div class="stats-row" style="margin-bottom:18px">
       <div class="stat-box"><div class="stat-lbl">Баланс проекта</div><div class="stat-val" style="color:${proj.color};font-size:18px">${fmt(totalBal)} USDT</div><div class="stat-sub">Сумма активных</div></div>
       <div class="stat-box"><div class="stat-lbl">Активных</div><div class="stat-val c-green">${d.active.length}</div><div class="stat-sub">Кошельков</div></div>
-      <div class="stat-box"><div class="stat-lbl">В архиве</div><div class="stat-val" style="color:#6e8fad">${d.archived.length}</div><div class="stat-sub">Архивировано</div></div>
+      <div class="stat-box"><div class="stat-lbl">В архиве</div><div class="stat-val" style="color:#7a9bb8">${d.archived.length}</div><div class="stat-sub">Архивировано</div></div>
       <div class="stat-box"><div class="stat-lbl">Транзакций</div><div class="stat-val c-yellow">${d.txs.length}</div><div class="stat-sub">В истории</div></div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
@@ -1596,16 +1592,16 @@ function renderWalletItem(w, projId, archived) {
   <div class="wallet-item ${archived?'archived':''}" id="witem-${w.id}">
     <div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
-        ${w.label?`<span style="font-size:11px;font-weight:700;color:#6e8fad">${escHtml(w.label)}</span>`:''}
+        ${w.label?`<span style="font-size:11px;font-weight:700;color:#7a9bb8">${escHtml(w.label)}</span>`:''}
         ${w.enrolled?'<span class="badge badge-green">⚡ GasFree</span>':'<span class="badge badge-gray">Не подключён</span>'}
         ${archived?'<span class="badge badge-gray">Архив</span>':''}
       </div>
-      <div style="font-size:9px;color:#334d66;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">EOA адрес</div>
+      <div style="font-size:9px;color:#3d5a78;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">EOA адрес</div>
       <div class="wallet-addr" onclick="copyRaw('${escHtml(w.addr)}')" title="Нажмите для копирования">${escHtml(w.addr)}</div>
       ${w.gasFreeAddr
         ? `<div style="margin-top:7px">
              <div style="font-size:9px;color:#00e676;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">▼ Адрес для пополнения USDT (GasFree)</div>
-             <div style="font-family:'Space Mono',monospace;font-size:10px;color:#00e5ff;word-break:break-all;cursor:pointer;padding:5px 8px;background:#0a1520;border-radius:4px;border:1px solid rgba(0,229,255,0.15)" onclick="copyRaw('${escHtml(w.gasFreeAddr)}')" title="Нажмите для копирования">${escHtml(w.gasFreeAddr)}</div>
+             <div style="font-family:'Space Mono',monospace;font-size:10px;color:#29d4e8;word-break:break-all;cursor:pointer;padding:5px 8px;background:#0a1520;border-radius:4px;border:1px solid rgba(0,229,255,0.15)" onclick="copyRaw('${escHtml(w.gasFreeAddr)}')" title="Нажмите для копирования">${escHtml(w.gasFreeAddr)}</div>
            </div>`
         : `<div style="font-size:9px;color:#ff9100;margin-top:5px">⚠ Нажмите «⚡ GF статус» чтобы получить адрес для пополнения</div>`
       }
@@ -1810,12 +1806,12 @@ const ROLES = {
 let currentRole = null; // set after login
 
 function doLogin() {
-  const userId = document.getElementById('auth-user').value;
+  const userId = (document.getElementById('auth-user').value || '').trim().toLowerCase();
   const pass   = document.getElementById('auth-pass').value;
   const errEl  = document.getElementById('auth-error');
 
-  if (!pass || PASSWORDS[userId] !== pass) {
-    errEl.textContent = 'Неверный пароль';
+  if (!userId || !pass || !PASSWORDS[userId] || PASSWORDS[userId] !== pass) {
+    errEl.textContent = 'Неверный логин или пароль';
     errEl.classList.add('show');
     document.getElementById('auth-pass').value = '';
     document.getElementById('auth-pass').focus();
@@ -1877,9 +1873,9 @@ function applyRole(userId) {
   if (existing) existing.remove();
   const badge = document.createElement('div');
   badge.id = 'role-badge';
-  badge.style.cssText = 'display:flex;align-items:center;gap:7px;padding:4px 11px;border-radius:5px;font-size:11px;font-weight:700;background:rgba(0,229,255,0.07);border:1px solid rgba(0,229,255,0.15);color:#6e8fad;white-space:nowrap;';
-  badge.innerHTML = `<span style="color:#00e5ff">◈</span> ${role.label}
-    <button onclick="doLogout()" style="background:none;border:none;color:#334d66;cursor:pointer;font-size:11px;margin-left:4px;font-family:'Syne',sans-serif;padding:0" title="Выйти">✕</button>`;
+  badge.style.cssText = 'display:flex;align-items:center;gap:7px;padding:4px 11px;border-radius:5px;font-size:11px;font-weight:700;background:rgba(41,212,232,0.09);border:1px solid rgba(0,229,255,0.15);color:#7a9bb8;white-space:nowrap;';
+  badge.innerHTML = `<span style="color:#29d4e8">◈</span> ${role.label}
+    <button onclick="doLogout()" style="background:none;border:none;color:#3d5a78;cursor:pointer;font-size:11px;margin-left:4px;font-family:'Syne',sans-serif;padding:0" title="Выйти">✕</button>`;
   document.querySelector('.topbar-right').prepend(badge);
 
   // ── Page-level restrictions ──
