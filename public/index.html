@@ -575,6 +575,34 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
       </div>
     </div>
     <div class="card">
+      <div class="card-head"><div class="card-title">Мастер-кошелёк · Активация EOA</div></div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="info-box"><span>ℹ</span><span>Новый EOA адрес неактивен до первой транзакции. При создании кошелька можно автоматически отправлять небольшую сумму TRX для активации.</span></div>
+        <div class="form-group">
+          <label class="form-label">Адрес мастер-кошелька</label>
+          <input class="form-input" id="cfg-master-addr" placeholder="T… (откуда слать TRX для активации)" style="font-size:11px"/>
+          <span class="form-hint">На этом кошельке должен быть запас TRX</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Приватный ключ мастер-кошелька <span class="badge badge-red" style="vertical-align:middle;margin-left:6px">Секрет</span></label>
+          <div style="display:flex;gap:8px">
+            <input type="password" class="form-input" id="cfg-master-key" placeholder="64 hex…" style="flex:1"/>
+            <button class="btn btn-ghost btn-sm" onclick="togglePwd('cfg-master-key',this)">Показать</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Сумма активации (TRX)</label>
+          <input type="number" class="form-input" id="cfg-activation-trx" value="2" min="1" step="0.5" style="width:120px"/>
+          <span class="form-hint">Рекомендуем 2 TRX — достаточно для активации</span>
+        </div>
+        <div class="config-row" style="padding:0;border:none">
+          <div><div class="config-lbl">Авто-активация при создании</div><div class="config-desc">Отправлять TRX автоматически после генерации кошелька</div></div>
+          <div class="toggle on" id="toggle-autoactivate" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="width:fit-content" onclick="testMasterWallet()">🔑 Проверить мастер-кошелёк</button>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-head"><div class="card-title">Сеть</div></div>
       <div class="config-row">
         <div><div class="config-lbl">Сеть TRON</div><div class="config-desc">Mainnet или Nile testnet</div></div>
@@ -643,6 +671,14 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
           <button class="copy-btn" style="margin-top:4px;width:fit-content" onclick="if(guardKeys()) copyText(document.getElementById('gr-key').textContent,this)">Копировать ключ</button>
         </div>
         <div class="warn-box"><span>⚠</span><span>Сохраните приватный ключ офлайн в надёжном месте. Восстановление невозможно.</span></div>
+        <div id="gen-activation-box" style="display:none;flex-direction:column;gap:8px">
+          <div class="divider"></div>
+          <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#3d5a78;text-transform:uppercase">Активация EOA</div>
+          <div id="gen-activation-status" style="font-size:12px;color:#7a9bb8"></div>
+          <button class="btn btn-outline btn-sm" id="gen-activate-btn" onclick="activateNewWallet()" style="width:fit-content">
+            ⚡ Отправить TRX для активации
+          </button>
+        </div>
         <div id="gen-gf-info" style="display:none;flex-direction:column;gap:6px">
           <div class="divider"></div>
           <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#3d5a78;text-transform:uppercase">GasFree статус</div>
@@ -765,8 +801,12 @@ function cfg() {
     gfSecret: (document.getElementById('cfg-gf-secret')?.value || '').trim(),
     gfUrl:    (document.getElementById('cfg-gf-url')?.value    || 'https://open.gasfree.io/tron').trim().replace(/\/$/,''),
     provider: (document.getElementById('cfg-provider')?.value  || '').trim(),
-    maxfee:   parseFloat(document.getElementById('cfg-maxfee')?.value || '5'),
-    tgKey:    (document.getElementById('cfg-tg-key')?.value    || '').trim(),
+    maxfee:       parseFloat(document.getElementById('cfg-maxfee')?.value || '5'),
+    masterAddr:   (document.getElementById('cfg-master-addr')?.value || '').trim(),
+    masterKey:    (document.getElementById('cfg-master-key')?.value  || '').trim(),
+    activationTrx: parseFloat(document.getElementById('cfg-activation-trx')?.value || '2'),
+    autoActivate: document.getElementById('toggle-autoactivate')?.classList.contains('on') ?? true,
+    tgKey:        (document.getElementById('cfg-tg-key')?.value    || '').trim(),
     rpc:      (document.getElementById('cfg-rpc')?.value       || 'https://api.trongrid.io').trim(),
     usdt:     (document.getElementById('cfg-usdt')?.value      || 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t').trim(),
     net:      (document.getElementById('cfg-net')?.value       || 'mainnet'),
@@ -805,8 +845,12 @@ async function loadConfigFromStorage() {
   if(c.gfKey)    document.getElementById('cfg-gf-key').value    = c.gfKey;
   if(c.gfSecret) document.getElementById('cfg-gf-secret').value = c.gfSecret;
   if(c.gfUrl)    document.getElementById('cfg-gf-url').value    = c.gfUrl;
-  if(c.provider) document.getElementById('cfg-provider').value  = c.provider;
-  if(c.maxfee)   document.getElementById('cfg-maxfee').value    = c.maxfee;
+  if(c.provider)      document.getElementById('cfg-provider').value       = c.provider;
+  if(c.maxfee)        document.getElementById('cfg-maxfee').value         = c.maxfee;
+  if(c.masterAddr)    document.getElementById('cfg-master-addr').value    = c.masterAddr;
+  if(c.masterKey)     document.getElementById('cfg-master-key').value     = c.masterKey;
+  if(c.activationTrx) document.getElementById('cfg-activation-trx').value = c.activationTrx;
+  if(c.autoActivate === false) document.getElementById('toggle-autoactivate')?.classList.remove('on');
   if(c.tgKey)    document.getElementById('cfg-tg-key').value    = c.tgKey;
   if(c.rpc)      document.getElementById('cfg-rpc').value       = c.rpc;
   if(c.usdt)     document.getElementById('cfg-usdt').value      = c.usdt;
@@ -1141,6 +1185,9 @@ function openGenModal(projId) {
   const proj = PROJECTS.find(p=>p.id===projId);
   document.getElementById('gen-modal-title').textContent = `Новый кошелёк — ${proj.name}`;
   document.getElementById('gen-result').style.display = 'none';
+  const ab = document.getElementById('gen-activation-box');
+  if (ab) ab.style.display = 'none';
+  _lastGeneratedAddr = null;
   document.getElementById('gen-gf-info').style.display = 'none';
   document.getElementById('gen-label').value = '';
   document.getElementById('imp-key-input').value = '';
@@ -1208,10 +1255,31 @@ async function executeGen() {
 
     toast('Кошелёк создан ✓', 'success');
     btn.innerHTML = '✓ Создан';
+    _lastGeneratedAddr = address; // store for activation
 
     // Auto-fetch GasFree info if enabled
     if(document.getElementById('toggle-autoenroll').classList.contains('on')) {
       await fetchGasFreeInfo(newWallet, genTargetProj, true);
+    }
+
+    // Show activation box
+    const c = cfg();
+    const activBox = document.getElementById('gen-activation-box');
+    const activStatus = document.getElementById('gen-activation-status');
+    const activBtn = document.getElementById('gen-activate-btn');
+    if (activBox) {
+      activBox.style.display = 'flex';
+      if (activBtn) { activBtn.disabled = false; activBtn.innerHTML = `⚡ Отправить ${c.activationTrx||2} TRX для активации`; }
+      if (activStatus) activStatus.textContent = '';
+    }
+
+    // Auto-activate if enabled and master key configured
+    if (c.autoActivate && c.masterKey && c.masterKey.length === 64) {
+      if (activStatus) activStatus.textContent = 'Авто-активация…';
+      await activateNewWallet(address);
+    } else if (!c.masterKey && activStatus) {
+      activStatus.textContent = 'Укажите мастер-кошелёк в Настройках для авто-активации';
+      activStatus.style.color = '#ff9100';
     }
 
   } catch(e) {
@@ -1645,6 +1713,91 @@ function renderWalletItem(w, projId, archived) {
       </div>
     </div>
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EOA ACTIVATION — send TRX from master wallet
+// ═══════════════════════════════════════════════════════════════
+let _lastGeneratedAddr = null; // EOA address of last generated wallet
+
+async function activateNewWallet(targetAddr) {
+  const c = cfg();
+  const addr = targetAddr || _lastGeneratedAddr;
+  if (!addr) { toast('Адрес не определён', 'error'); return; }
+  if (!c.masterKey || c.masterKey.length !== 64) {
+    toast('Укажите приватный ключ мастер-кошелька в Настройках', 'error');
+    return;
+  }
+
+  const btn    = document.getElementById('gen-activate-btn');
+  const status = document.getElementById('gen-activation-status');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin-el-light"></span> Отправка…'; }
+  if (status) status.textContent = `Отправка ${c.activationTrx} TRX на ${addr.substring(0,16)}…`;
+
+  try {
+    const res = await fetch('/proxy/send-trx', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fromPrivKey: c.masterKey,
+        toAddr:      addr,
+        amountTrx:   c.activationTrx || 2,
+        rpc:         c.rpc,
+        tgKey:       c.tgKey,
+      })
+    });
+    const data = await res.json();
+    if (data.ok && data.txid) {
+      if (status) {
+        status.innerHTML = `<span style="color:#00e676">✓ Отправлено ${c.activationTrx} TRX</span><br>
+          <a href="https://tronscan.org/#/transaction/${escHtml(data.txid)}" target="_blank"
+             style="font-family:'Space Mono',monospace;font-size:10px;color:#29d4e8">
+            ${data.txid.substring(0,24)}… ↗
+          </a>`;
+      }
+      if (btn) { btn.innerHTML = '✓ Отправлено'; }
+      toast(`${c.activationTrx} TRX отправлено на ${addr.substring(0,12)}… ✓`, 'success');
+    } else {
+      throw new Error(data.error || JSON.stringify(data));
+    }
+  } catch(e) {
+    if (status) status.innerHTML = `<span style="color:#ff3b5c">✕ Ошибка: ${escHtml(e.message)}</span>`;
+    if (btn) { btn.disabled = false; btn.innerHTML = '⚡ Повторить'; }
+    toast('Ошибка активации: ' + e.message, 'error');
+  }
+}
+
+async function testMasterWallet() {
+  const c = cfg();
+  if (!c.masterAddr && !c.masterKey) { toast('Заполните мастер-кошелёк в настройках', 'error'); return; }
+  toast('Проверка мастер-кошелька…');
+  try {
+    // Verify key → address
+    const res = await fetch('/proxy/verify-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ privKey: c.masterKey })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    // Check TRX balance
+    const balRes = await fetch('/proxy/trongrid', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tgPath: `/v1/accounts/${data.address}`, method: 'GET', apiKey: c.tgKey, rpc: c.rpc })
+    });
+    const balData = await balRes.json();
+    const trxBal = ((balData.data?.[0]?.balance || 0) / 1e6).toFixed(2);
+
+    if (c.masterAddr && data.address !== c.masterAddr) {
+      toast(`⚠ Адрес из ключа (${data.address.substring(0,12)}…) ≠ указанному адресу!`, 'error');
+    } else {
+      toast(`Мастер-кошелёк OK · ${data.address.substring(0,12)}… · ${trxBal} TRX`, 'success');
+    }
+  } catch(e) {
+    toast('Ошибка: ' + e.message, 'error');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
