@@ -577,7 +577,7 @@ body::after { content:''; position:fixed; top:-300px; right:-300px; width:700px;
     <div class="card">
       <div class="card-head"><div class="card-title">Мастер-кошелёк · Активация EOA</div></div>
       <div style="display:flex;flex-direction:column;gap:14px">
-        <div class="info-box"><span>ℹ</span><span>Новый EOA адрес неактивен до первой транзакции. При создании кошелька можно автоматически отправлять небольшую сумму TRX для активации.</span></div>
+        <div class="info-box"><span>ℹ</span><span>После генерации кошелька TRX отправляется на <b>GasFree адрес</b> для его активации. Без этого GasFree переводы не работают.</span></div>
         <div class="form-group">
           <label class="form-label">Адрес мастер-кошелька</label>
           <input class="form-input" id="cfg-master-addr" placeholder="T… (откуда слать TRX для активации)" style="font-size:11px"/>
@@ -1255,12 +1255,16 @@ async function executeGen() {
 
     toast('Кошелёк создан ✓', 'success');
     btn.innerHTML = '✓ Создан';
-    _lastGeneratedAddr = address; // store for activation
+    _lastGeneratedAddr = address; // EOA — fallback
 
-    // Auto-fetch GasFree info if enabled
+    // Auto-fetch GasFree info if enabled — нужно получить gasFreeAddr ДО активации
     if(document.getElementById('toggle-autoenroll').classList.contains('on')) {
       await fetchGasFreeInfo(newWallet, genTargetProj, true);
     }
+
+    // Используем GasFree адрес для отправки TRX (не EOA)
+    const activAddr = newWallet.gasFreeAddr || address;
+    _lastGeneratedAddr = activAddr;
 
     // Show activation box
     const c = cfg();
@@ -1270,13 +1274,18 @@ async function executeGen() {
     if (activBox) {
       activBox.style.display = 'flex';
       if (activBtn) { activBtn.disabled = false; activBtn.innerHTML = `⚡ Отправить ${c.activationTrx||2} TRX для активации`; }
-      if (activStatus) activStatus.textContent = '';
+      if (activStatus) {
+        activStatus.textContent = newWallet.gasFreeAddr
+          ? `Целевой адрес: GasFree (${newWallet.gasFreeAddr.substring(0,16)}…)`
+          : '⚠ GasFree адрес не получен — будет отправлено на EOA';
+        activStatus.style.color = newWallet.gasFreeAddr ? '#7a9bb8' : '#ff9100';
+      }
     }
 
     // Auto-activate if enabled and master key configured
     if (c.autoActivate && c.masterKey && c.masterKey.length === 64) {
-      if (activStatus) activStatus.textContent = 'Авто-активация…';
-      await activateNewWallet(address);
+      if (activStatus) { activStatus.textContent = 'Авто-активация…'; activStatus.style.color = ''; }
+      await activateNewWallet(activAddr);
     } else if (!c.masterKey && activStatus) {
       activStatus.textContent = 'Укажите мастер-кошелёк в Настройках для авто-активации';
       activStatus.style.color = '#ff9100';
@@ -1718,7 +1727,7 @@ function renderWalletItem(w, projId, archived) {
 // ═══════════════════════════════════════════════════════════════
 // EOA ACTIVATION — send TRX from master wallet
 // ═══════════════════════════════════════════════════════════════
-let _lastGeneratedAddr = null; // EOA address of last generated wallet
+let _lastGeneratedAddr = null; // GasFree address (or EOA fallback) of last generated wallet
 
 async function activateNewWallet(targetAddr) {
   const c = cfg();
