@@ -496,6 +496,41 @@ app.patch('/storage/config', (req, res) => {
 // ─────────────────────────────────────────────────────────────────
 // Health / SPA
 // ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// /proxy/send-trx  — send TRX from master wallet to activate EOA
+// Body: { fromPrivKey, toAddr, amountTrx, rpc, tgKey }
+// ─────────────────────────────────────────────────────────────────
+app.post('/proxy/send-trx', async (req, res) => {
+  if (!TronWeb) return res.status(500).json({ error: 'TronWeb not loaded' });
+  const { fromPrivKey, toAddr, amountTrx, rpc, tgKey } = req.body || {};
+  if (!fromPrivKey || !toAddr || !amountTrx) {
+    return res.status(400).json({ error: 'Missing fromPrivKey / toAddr / amountTrx' });
+  }
+  try {
+    const fullHost = rpc || 'https://api.trongrid.io';
+    const headers  = tgKey ? { 'TRON-PRO-API-KEY': tgKey } : {};
+    const tw = new TronWeb({ fullHost, headers });
+    tw.setPrivateKey(fromPrivKey.replace(/^0x/, ''));
+
+    const amountSun = Math.round(parseFloat(amountTrx) * 1_000_000); // TRX → SUN
+    console.log(`[TRX] sending ${amountTrx} TRX (${amountSun} SUN) to ${toAddr}`);
+
+    const tx      = await tw.transactionBuilder.sendTrx(toAddr, amountSun);
+    const signedTx = await tw.trx.sign(tx, fromPrivKey.replace(/^0x/, ''));
+    const result   = await tw.trx.sendRawTransaction(signedTx);
+
+    console.log('[TRX] result:', JSON.stringify(result));
+    if (result.result || result.txid) {
+      res.json({ ok: true, txid: result.txid || result.transaction?.txID, result });
+    } else {
+      res.status(200).json({ ok: false, error: result.message || JSON.stringify(result), result });
+    }
+  } catch(e) {
+    console.error('[TRX send error]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/health', (_, res) => res.json({ ok: true, tronweb: !!TronWeb, ts: Date.now() }));
 
 // Debug: verify that a private key produces the expected address
