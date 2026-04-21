@@ -2074,12 +2074,12 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 // ── HARDCODED PASSWORDS — change these directly in this file ──
 const PASSWORDS = {
-  admin: 'admin123',   // Super Admin — full access
-  mull:  'mull111',    // User Mull   — tab Mull only
-  time:  'time222',    // User Time   — tab Time only
-  sov:   'sov333',     // User Sov    — tab Sov only
-  rail:  'rail444',    // User Rail   — tab Rail only
-  temp:  'temp555',    // User Temp   — tab Temp only
+  admin: 'NOM7!jlPO098rgJNB',   // Super Admin — full access
+  mull:  'MJkiu786srQdgLOJ',    // User Mull   — tab Mull only
+  time:  'TBON68ettQ11!jl432AS',    // User Time   — tab Time only
+  sov:   'SnjOLKJbn8!jhjKKL0',     // User Sov    — tab Sov only
+  rail:  'Rbn909y0oON!4',    // User Rail   — tab Rail only
+  temp:  'TJem5*(MKL70O55',    // User Temp   — tab Temp only
 };
 
 // ── ROLES ──
@@ -2214,12 +2214,10 @@ function exportWalletsCSV() {
 
   const csv = rows.map(r => r.map(cell => {
     const s = String(cell).replace(/"/g, '""');
-    return s.includes(',') || s.includes('"') || s.includes('
-') ? `"${s}"` : s;
-  }).join(',')).join('
-');
+    return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s}"` : s;
+  }).join(',')).join('\n');
 
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;
