@@ -420,6 +420,50 @@ app.post('/proxy/trongrid', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────
+// AUTH — passwords stored server-side only, never sent to client
+// ─────────────────────────────────────────────────────────────────
+const USERS = {
+  admin: { password: 'NOM7!jlPO098rgJNB', role: 'admin' },
+  mull:  { password: 'MJkiu786srQdgLOJ',  role: 'mull'  },
+  time:  { password: 'TBON68ettQ11!jl432AS',  role: 'time'  },
+  sov:   { password: 'SnjOLKJbn8!jhjKKL0',   role: 'sov'   },
+  rail:  { password: 'Rbn909y0oON!4',  role: 'rail'  },
+  temp:  { password: 'TJem5*(MKL70O55',  role: 'temp'  },
+};
+
+// Simple session tokens stored in memory
+// (survive until server restart — good enough for this use case)
+const SESSIONS = new Map();
+function makeToken() {
+  return require('crypto').randomBytes(32).toString('hex');
+}
+
+app.post('/auth/login', (req, res) => {
+  const { userId, password } = req.body || {};
+  const user = userId && USERS[userId.toLowerCase().trim()];
+  if (!user || user.password !== password) {
+    return res.status(401).json({ error: 'Неверный логин или пароль' });
+  }
+  const token = makeToken();
+  SESSIONS.set(token, { userId: userId.toLowerCase().trim(), role: user.role, ts: Date.now() });
+  console.log(`[Auth] Login: ${userId} → token issued`);
+  res.json({ token, role: user.role });
+});
+
+app.post('/auth/logout', (req, res) => {
+  const token = req.headers['x-auth-token'] || req.body?.token;
+  if (token) SESSIONS.delete(token);
+  res.json({ ok: true });
+});
+
+app.get('/auth/check', (req, res) => {
+  const token = req.headers['x-auth-token'];
+  const session = token && SESSIONS.get(token);
+  if (!session) return res.status(401).json({ error: 'Not authenticated' });
+  res.json({ role: session.role, userId: session.userId });
+});
+
+// ─────────────────────────────────────────────────────────────────
 // PERSISTENT STORAGE — data.json on server
 // Stores: wallets (with private keys), config per user role
 // ─────────────────────────────────────────────────────────────────
