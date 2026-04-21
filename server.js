@@ -5,7 +5,6 @@ const path    = require('path');
 const crypto  = require('crypto');
 const fs      = require('fs');
 
-
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -577,6 +576,20 @@ app.post('/proxy/send-trx', async (req, res) => {
     console.error('[TRX send error]', e.message);
     res.status(500).json({ error: e.message });
   }
+});
+
+// Temp: download data.json (remove after use)
+app.get('/admin/download-data', (req, res) => {
+  if (!fs.existsSync(DATA_FILE)) return res.status(404).json({ error: 'No data file' });
+  res.download(DATA_FILE, 'data.json');
+});
+
+// Temp: upload/restore data.json
+app.post('/admin/restore-data', (req, res) => {
+  const incoming = req.body;
+  if (!incoming || typeof incoming !== 'object') return res.status(400).json({ error: 'Invalid JSON' });
+  writeData(incoming);
+  res.json({ ok: true, walletProjects: Object.keys(incoming.wallets || {}) });
 });
 
 app.get('/health', (_, res) => res.json({ ok: true, tronweb: !!TronWeb, ts: Date.now() }));
