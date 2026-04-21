@@ -422,13 +422,13 @@ app.post('/proxy/trongrid', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────
 // AUTH — passwords stored server-side only, never sent to client
 // ─────────────────────────────────────────────────────────────────
-const USERS = {
-  admin: { password: 'NOM7!jlPO098rgJNB', role: 'admin' },
-  mull:  { password: 'MJkiu786srQdgLOJ',  role: 'mull'  },
-  time:  { password: 'TBON68ettQ11!jl432AS',  role: 'time'  },
-  sov:   { password: 'SnjOLKJbn8!jhjKKL0',   role: 'sov'   },
-  rail:  { password: 'Rbn909y0oON!4',  role: 'rail'  },
-  temp:  { password: 'TJem5*(MKL70O55',  role: 'temp'  },
+const PASSWORDS = {
+  admin: 'NOM7!jlPO098rgJNB',   // Super Admin — full access
+  mull:  'MJkiu786srQdgLOJ',    // User Mull   — tab Mull only
+  time:  'TBON68ettQ11!jl432AS',    // User Time   — tab Time only
+  sov:   'SnjOLKJbn8!jhjKKL0',     // User Sov    — tab Sov only
+  rail:  'Rbn909y0oON!4',    // User Rail   — tab Rail only
+  temp:  'TJem5*(MKL70O55',    // User Temp   — tab Temp only
 };
 
 // Simple session tokens stored in memory
