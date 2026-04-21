@@ -1663,7 +1663,12 @@ function visibleWallets(walletList) {
   if (currentRole.canWithdraw) return walletList; // admin sees all
   const userId = (() => { try { return sessionStorage.getItem('tgf_role'); } catch(e){ return null; } })();
   if (!userId) return [];
-  return walletList.filter(w => w.owner === userId);
+  const result = walletList.filter(w => !w.owner || w.owner === userId);
+  if (walletList.length > 0) {
+    console.log(`[Visibility] userId=${userId} total=${walletList.length} visible=${result.length}`, 
+      walletList.map(w => ({addr: w.addr?.substring(0,10), owner: w.owner})));
+  }
+  return result;
 }
 
 function renderProjPanel(proj, isActive) {
@@ -1962,6 +1967,7 @@ function renderTxTable() {
 // ═══════════════════════════════════════════════════════════════
 // Lightweight wallet sync — just wallets, no config re-apply
 async function syncWalletsFromServer() {
+  if (!currentRole) return; // not logged in yet
   try {
     const res = await fetch('/storage');
     if (!res.ok) return;
@@ -1972,7 +1978,6 @@ async function syncWalletsFromServer() {
     PROJECTS.forEach(p => {
       const sw = serverData.wallets[p.id];
       if (!sw) return;
-      // Only update if server data differs (compare counts as quick check)
       const localActive   = DB[p.id].active?.length   || 0;
       const localArchived = DB[p.id].archived?.length  || 0;
       const srvActive     = sw.active?.length   || 0;
@@ -1989,11 +1994,25 @@ async function syncWalletsFromServer() {
       renderAllProjPanels();
       populateWithdrawSelect();
       updateGlobalStats();
+      // Re-apply tab visibility after re-render
+      reapplyTabVisibility();
       console.log('[Sync] wallets updated from server');
     }
-    // Update localStorage
     try { localStorage.setItem('tgf2_wallets', JSON.stringify(serverData.wallets)); } catch(e) {}
-  } catch(e) { /* silent — no network is fine */ }
+  } catch(e) { /* silent */ }
+}
+
+// Re-apply tab hiding without full applyRole (avoids side effects)
+function reapplyTabVisibility() {
+  if (!currentRole) return;
+  const userId = (() => { try { return sessionStorage.getItem('tgf_role'); } catch(e){ return null; } })();
+  if (!userId) return;
+  const role = ROLES[userId];
+  if (!role) return;
+  PROJECTS.forEach(p => {
+    const tabEl = document.getElementById('ptab-' + p.id);
+    if (tabEl) tabEl.style.display = role.tabs.includes(p.id) ? '' : 'none';
+  });
 }
 
 function setMainPage(id, el) {
@@ -2022,7 +2041,7 @@ function switchProjTab(id) {
   document.getElementById('ptab-'+id)?.classList.add('active');
   document.querySelectorAll('.proj-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('ppanel-'+id)?.classList.add('active');
-  // Sync wallets when switching project tab
+  reapplyTabVisibility();
   syncWalletsFromServer();
 }
 
