@@ -883,9 +883,10 @@ async function loadConfigFromStorage() {
 
   PROJECTS.forEach(p => {
     if (savedWallets[p.id]) {
-      DB[p.id].active   = savedWallets[p.id].active   || [];
-      DB[p.id].archived = savedWallets[p.id].archived || [];
-      DB[p.id].txs      = savedWallets[p.id].txs      || [];
+      // Assign owner = tab id for legacy wallets without owner
+      DB[p.id].active   = (savedWallets[p.id].active   || []).map(w => w.owner ? w : { ...w, owner: 'admin' });
+      DB[p.id].archived = (savedWallets[p.id].archived || []).map(w => w.owner ? w : { ...w, owner: 'admin' });
+      DB[p.id].txs      = savedWallets[p.id].txs || [];
     }
   });
 
@@ -894,6 +895,15 @@ async function loadConfigFromStorage() {
   renderAllProjPanels();
   populateWithdrawSelect();
   updateGlobalStats();
+
+  // Persist owner assignments back to server silently
+  const walletsToSave = {};
+  PROJECTS.forEach(p => { walletsToSave[p.id] = DB[p.id]; });
+  fetch('/storage', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ wallets: walletsToSave })
+  }).catch(() => {});
 }
 
 function saveWallets(projId) {
@@ -1663,12 +1673,9 @@ function visibleWallets(walletList) {
   if (currentRole.canWithdraw) return walletList; // admin sees all
   const userId = (() => { try { return sessionStorage.getItem('tgf_role'); } catch(e){ return null; } })();
   if (!userId) return [];
-  const result = walletList.filter(w => !w.owner || w.owner === userId);
-  if (walletList.length > 0) {
-    console.log(`[Visibility] userId=${userId} total=${walletList.length} visible=${result.length}`, 
-      walletList.map(w => ({addr: w.addr?.substring(0,10), owner: w.owner})));
-  }
-  return result;
+  // Show only wallets explicitly owned by this user
+  // Wallets with owner='admin' or owner of another user are NOT shown
+  return walletList.filter(w => w.owner === userId);
 }
 
 function renderProjPanel(proj, isActive) {
@@ -1983,9 +1990,10 @@ async function syncWalletsFromServer() {
       const srvActive     = sw.active?.length   || 0;
       const srvArchived   = sw.archived?.length || 0;
       if (srvActive !== localActive || srvArchived !== localArchived) {
-        DB[p.id].active   = sw.active   || [];
-        DB[p.id].archived = sw.archived || [];
-        DB[p.id].txs      = sw.txs      || [];
+        // Assign owner based on tab if missing (legacy/imported wallets)
+        DB[p.id].active   = (sw.active   || []).map(w => w.owner ? w : { ...w, owner: 'admin' });
+        DB[p.id].archived = (sw.archived || []).map(w => w.owner ? w : { ...w, owner: 'admin' });
+        DB[p.id].txs      = sw.txs || [];
         changed = true;
       }
     });
