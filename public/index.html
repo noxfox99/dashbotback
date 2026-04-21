@@ -2066,9 +2066,11 @@ function rerenderProj(projId) {
   panel.replaceWith(tmp.firstElementChild);
   const tabEl = document.getElementById('ptab-'+projId);
   if(tabEl) {
-    tabEl.innerHTML = `${proj.name}<span class="proj-tab-count">${DB[projId].active.length}</span>`;
+    const visCount = visibleWallets(DB[projId].active).length;
+    tabEl.innerHTML = `${proj.name}<span class="proj-tab-count">${visCount}</span>`;
     if(isActive) tabEl.classList.add('active');
   }
+  reapplyTabVisibility();
 }
 
 function updateGlobalStats() {
@@ -2164,12 +2166,19 @@ function toast(msg,type='info') {
 // BOOT
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
-  // First check if we have a valid session
-  await checkSession();
-  // Then load config/wallets from server
+  // Always load config from server first — before auth check
+  // This ensures settings are populated regardless of who logs in
   await loadConfigFromStorage();
 
-  // Auto-sync wallets every 30s and when tab becomes visible
+  // Then check session
+  await checkSession();
+
+  // Re-apply role visibility after everything loaded
+  if (currentRole) {
+    const userId = (() => { try { return sessionStorage.getItem('tgf_role'); } catch(e){ return null; } })();
+    if (userId) applyRole(userId);
+  }
+
   setInterval(() => { if (currentRole) syncWalletsFromServer(); }, 30000);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && currentRole) syncWalletsFromServer();
@@ -2235,9 +2244,10 @@ async function doLogin() {
     } catch(e) {}
 
     document.getElementById('auth-overlay').style.display = 'none';
+
+    // Apply role (renders panels, hides tabs)
     applyRole(data.role);
-    // Reload config and wallets from server after login
-    await loadConfigFromStorage();
+
     toast(`Добро пожаловать, ${currentRole.label}!`, 'success');
 
   } catch(e) {
