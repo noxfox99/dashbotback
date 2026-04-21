@@ -1257,14 +1257,15 @@ async function executeGen() {
     const newWallet = {
       id: 'w'+Date.now(),
       addr: address,
-      privKey: privKey, // stored in-memory only, not in localStorage
+      privKey: privKey,
       label,
       balance: 0,
       trx: 0,
       enrolled: false,
       gasFreeAddr: null,
       nonce: 0,
-      created: new Date().toISOString().split('T')[0]
+      created: new Date().toISOString().split('T')[0],
+      owner: currentRole ? (currentRole.canWithdraw ? 'admin' : Object.keys(ROLES).find(k => ROLES[k] === currentRole) || 'admin') : 'admin',
     };
     DB[genTargetProj].active.push(newWallet);
     saveWallets();
@@ -1652,21 +1653,35 @@ function renderAllProjPanels() {
   host.innerHTML = PROJECTS.map((p,i) => renderProjPanel(p, i===0)).join('');
 }
 
+// Returns wallets visible to current user
+// Admin: all wallets
+// User: only wallets they created (owner === their userId)
+// Legacy wallets with no owner: visible only to admin
+function visibleWallets(walletList) {
+  if (!currentRole) return [];
+  if (currentRole.canWithdraw) return walletList; // admin sees all
+  const userId = (() => { try { return sessionStorage.getItem('tgf_role'); } catch(e){ return null; } })();
+  if (!userId) return [];
+  return walletList.filter(w => w.owner === userId);
+}
+
 function renderProjPanel(proj, isActive) {
   const d = DB[proj.id];
-  const totalBal = d.active.reduce((s,w)=>s+w.balance, 0);
+  const visActive   = visibleWallets(d.active);
+  const visArchived = visibleWallets(d.archived);
+  const totalBal = visActive.reduce((s,w)=>s+w.balance, 0);
   return `
   <div class="proj-panel ${isActive?'active':''}" id="ppanel-${proj.id}">
     <div class="stats-row" style="margin-bottom:18px">
       <div class="stat-box"><div class="stat-lbl">Баланс проекта</div><div class="stat-val" style="color:${proj.color};font-size:18px">${fmt(totalBal)} USDT</div><div class="stat-sub">Сумма активных</div></div>
-      <div class="stat-box"><div class="stat-lbl">Активных</div><div class="stat-val c-green">${d.active.length}</div><div class="stat-sub">Кошельков</div></div>
-      <div class="stat-box"><div class="stat-lbl">В архиве</div><div class="stat-val" style="color:#7e9ab5">${d.archived.length}</div><div class="stat-sub">Архивировано</div></div>
+      <div class="stat-box"><div class="stat-lbl">Активных</div><div class="stat-val c-green">${visActive.length}</div><div class="stat-sub">Кошельков</div></div>
+      <div class="stat-box"><div class="stat-lbl">В архиве</div><div class="stat-val" style="color:#7e9ab5">${visArchived.length}</div><div class="stat-sub">Архивировано</div></div>
       <div class="stat-box"><div class="stat-lbl">Транзакций</div><div class="stat-val c-yellow">${d.txs.length}</div><div class="stat-sub">В истории</div></div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
       <div class="inner-tabs" id="itabs-${proj.id}">
-        <div class="inner-tab active" onclick="switchInner('${proj.id}','active',this)">Активные <span class="proj-tab-count">${d.active.length}</span></div>
-        <div class="inner-tab" onclick="switchInner('${proj.id}','archive',this)">Архив <span class="proj-tab-count">${d.archived.length}</span></div>
+        <div class="inner-tab active" onclick="switchInner('${proj.id}','active',this)">Активные <span class="proj-tab-count">${visActive.length}</span></div>
+        <div class="inner-tab" onclick="switchInner('${proj.id}','archive',this)">Архив <span class="proj-tab-count">${visArchived.length}</span></div>
         <div class="inner-tab" onclick="switchInner('${proj.id}','history',this)">История TX <span class="proj-tab-count">${d.txs.length}</span></div>
       </div>
       <div style="display:flex;gap:8px">
@@ -1675,12 +1690,12 @@ function renderProjPanel(proj, isActive) {
       </div>
     </div>
     <div class="inner-panel active" id="ipanel-${proj.id}-active">
-      ${d.active.length===0 ? '<div class="empty-state"><div class="empty-icon">◈</div>Нет активных кошельков</div>' : ''}
-      <div class="wallet-list">${d.active.map(w=>renderWalletItem(w,proj.id,false)).join('')}</div>
+      ${visActive.length===0 ? '<div class="empty-state"><div class="empty-icon">◈</div>Нет активных кошельков</div>' : ''}
+      <div class="wallet-list">${visActive.map(w=>renderWalletItem(w,proj.id,false)).join('')}</div>
     </div>
     <div class="inner-panel" id="ipanel-${proj.id}-archive">
-      ${d.archived.length===0 ? '<div class="empty-state"><div class="empty-icon">📦</div>Архив пуст</div>' : ''}
-      <div class="wallet-list">${d.archived.map(w=>renderWalletItem(w,proj.id,true)).join('')}</div>
+      ${visArchived.length===0 ? '<div class="empty-state"><div class="empty-icon">📦</div>Архив пуст</div>' : ''}
+      <div class="wallet-list">${visArchived.map(w=>renderWalletItem(w,proj.id,true)).join('')}</div>
     </div>
     <div class="inner-panel" id="ipanel-${proj.id}-history">
       ${d.txs.length===0
@@ -2039,9 +2054,11 @@ function rerenderProj(projId) {
 function updateGlobalStats() {
   let total=0, active=0, archived=0, txs=0;
   Object.values(DB).forEach(d => {
-    d.active.forEach(w=>total+=w.balance);
-    active   += d.active.length;
-    archived += d.archived.length;
+    const va = visibleWallets(d.active);
+    const vr = visibleWallets(d.archived);
+    va.forEach(w=>total+=w.balance);
+    active   += va.length;
+    archived += vr.length;
     txs      += d.txs.length;
   });
   document.getElementById('gstat-total').textContent    = fmt(total)+' USDT';
@@ -2054,7 +2071,7 @@ function populateWithdrawSelect() {
   const sel = document.getElementById('wd-from-select');
   sel.innerHTML = '<option value="">— Выберите кошелёк —</option>';
   PROJECTS.forEach(p => {
-    DB[p.id].active.forEach(w => {
+    visibleWallets(DB[p.id].active).forEach(w => {
       const opt = document.createElement('option');
       opt.value = w.addr;
       const displayAddr = w.gasFreeAddr ? w.gasFreeAddr.substring(0,14) + '…' : w.addr.substring(0,14) + '…';
