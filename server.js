@@ -580,16 +580,26 @@ app.post('/proxy/send-trx', async (req, res) => {
 
 // Temp: download data.json (remove after use)
 app.get('/admin/download-data', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
   if (!fs.existsSync(DATA_FILE)) return res.status(404).json({ error: 'No data file' });
   res.download(DATA_FILE, 'data.json');
 });
 
 // Temp: upload/restore data.json
 app.post('/admin/restore-data', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
   const incoming = req.body;
   if (!incoming || typeof incoming !== 'object') return res.status(400).json({ error: 'Invalid JSON' });
   writeData(incoming);
   res.json({ ok: true, walletProjects: Object.keys(incoming.wallets || {}) });
+});
+
+app.options('/admin/restore-data', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.sendStatus(200);
 });
 
 app.get('/health', (_, res) => res.json({ ok: true, tronweb: !!TronWeb, ts: Date.now() }));
