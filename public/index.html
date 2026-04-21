@@ -1641,9 +1641,10 @@ async function enrollWalletGF(wid, projId) {
 function renderProjTabs() {
   const bar = document.getElementById('proj-tabs-bar');
   bar.innerHTML = PROJECTS.map(p => {
-    const cnt = DB[p.id].active.length;
-    return `<div class="proj-tab ${p.id===currentProjId?'active':''}" id="ptab-${p.id}" onclick="switchProjTab('${p.id}')">
-      ${p.name}<span class="proj-tab-count">${cnt}</span>
+    const vis = visibleWallets(DB[p.id].active).length;
+    const hidden = currentRole && !currentRole.canWithdraw && !currentRole.tabs.includes(p.id) ? 'style="display:none"' : '';
+    return `<div class="proj-tab ${p.id===currentProjId?'active':''}" id="ptab-${p.id}" onclick="switchProjTab('${p.id}')" ${hidden}>
+      ${p.name}<span class="proj-tab-count">${vis}</span>
     </div>`;
   }).join('');
 }
@@ -2232,15 +2233,15 @@ function applyRole(userId) {
   const role = ROLES[userId];
   currentRole = role;
 
-  // ── Project tabs: hide tabs user can't access ──
+  // Re-render first — this recreates ptab- elements
+  renderAllProjPanels();
+  populateWithdrawSelect();
+
+  // THEN hide tabs — must be after renderAllProjPanels recreates them
   PROJECTS.forEach(p => {
     const tabEl = document.getElementById('ptab-' + p.id);
     if (tabEl) tabEl.style.display = role.tabs.includes(p.id) ? '' : 'none';
   });
-
-  // Re-render all panels so withdraw buttons reflect the role
-  renderAllProjPanels();
-  populateWithdrawSelect();
 
   // Master wallet card — admin only
   const masterCard = document.getElementById('card-master-wallet');
@@ -2256,6 +2257,12 @@ function applyRole(userId) {
   } else {
     switchProjTab(currentProjId);
   }
+
+  // Hide tabs again after switchProjTab (it may re-render)
+  PROJECTS.forEach(p => {
+    const tabEl = document.getElementById('ptab-' + p.id);
+    if (tabEl) tabEl.style.display = role.tabs.includes(p.id) ? '' : 'none';
+  });
 
   // ── Topbar: hide Withdraw and Config for non-admins ──
   document.querySelectorAll('.topbar-nav-btn').forEach(btn => {
