@@ -808,54 +808,78 @@ function cfg() {
   };
 }
 
-function saveConfig() {
+async function saveConfig() {
   const c = cfg();
-  // Save to localStorage
-  try { localStorage.setItem('tgf2_cfg', JSON.stringify(c)); } catch(e){}
-  // Save to server
-  fetch('/storage/config', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(c)
-  }).then(() => toast('Настройки сохранены ✓', 'success'))
-    .catch(e => { console.warn('[Storage] config save error:', e); toast('Настройки сохранены (локально)', 'success'); });
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin-el"></span> Сохранение…'; }
+  try {
+    const res = await fetch('/storage/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(c)
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    // Also keep in localStorage as instant fallback
+    try { localStorage.setItem('tgf2_cfg', JSON.stringify(c)); } catch(e) {}
+    toast('Настройки сохранены ✓', 'success');
+  } catch(e) {
+    // Fallback to localStorage only
+    try { localStorage.setItem('tgf2_cfg', JSON.stringify(c)); } catch(e2) {}
+    toast('Сохранено локально (сервер недоступен)', 'success');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '✓ Сохранить'; }
+  }
 }
 
 async function loadConfigFromStorage() {
-  // Load from server first, fallback to localStorage
-  let serverData = { wallets: {}, config: {} };
+  // Always try server first — it's the single source of truth
+  let serverData = null;
   try {
     const res = await fetch('/storage');
-    if (res.ok) serverData = await res.json();
-    console.log('[Storage] loaded from server');
+    if (res.ok) {
+      serverData = await res.json();
+      console.log('[Storage] loaded from server OK');
+    }
   } catch(e) {
-    console.warn('[Storage] server load failed, using localStorage:', e.message);
+    console.warn('[Storage] server unavailable, falling back to localStorage');
   }
 
-  // Apply config
-  const c = serverData.config && Object.keys(serverData.config).length
-    ? serverData.config
-    : JSON.parse(localStorage.getItem('tgf2_cfg') || '{}');
+  // Config: server → localStorage → empty
+  let c = {};
+  if (serverData?.config && Object.keys(serverData.config).length) {
+    c = serverData.config;
+    // Sync server data to localStorage for offline fallback
+    try { localStorage.setItem('tgf2_cfg', JSON.stringify(c)); } catch(e) {}
+  } else {
+    try { c = JSON.parse(localStorage.getItem('tgf2_cfg') || '{}'); } catch(e) {}
+  }
 
-  if(c.gfKey)    document.getElementById('cfg-gf-key').value    = c.gfKey;
-  if(c.gfSecret) document.getElementById('cfg-gf-secret').value = c.gfSecret;
-  if(c.gfUrl)    document.getElementById('cfg-gf-url').value    = c.gfUrl;
-  if(c.provider)      document.getElementById('cfg-provider').value       = c.provider;
-  if(c.maxfee)        document.getElementById('cfg-maxfee').value         = c.maxfee;
-  if(c.masterAddr)    document.getElementById('cfg-master-addr').value    = c.masterAddr;
-  if(c.masterKey)     document.getElementById('cfg-master-key').value     = c.masterKey;
-  if(c.activationTrx) document.getElementById('cfg-activation-trx').value = c.activationTrx;
-  if(c.autoActivate === false) document.getElementById('toggle-autoactivate')?.classList.remove('on');
-  if(c.tgKey)    document.getElementById('cfg-tg-key').value    = c.tgKey;
-  if(c.rpc)      document.getElementById('cfg-rpc').value       = c.rpc;
-  if(c.usdt)     document.getElementById('cfg-usdt').value      = c.usdt;
-  if(c.net)      document.getElementById('cfg-net').value       = c.net;
+  // Apply config to fields
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined && val !== null && val !== '') el.value = val; };
+  setVal('cfg-gf-key',        c.gfKey);
+  setVal('cfg-gf-secret',     c.gfSecret);
+  setVal('cfg-gf-url',        c.gfUrl);
+  setVal('cfg-provider',      c.provider);
+  setVal('cfg-maxfee',        c.maxfee);
+  setVal('cfg-master-addr',   c.masterAddr);
+  setVal('cfg-master-key',    c.masterKey);
+  setVal('cfg-activation-trx', c.activationTrx);
+  setVal('cfg-tg-key',        c.tgKey);
+  setVal('cfg-rpc',           c.rpc);
+  setVal('cfg-usdt',          c.usdt);
+  setVal('cfg-net',           c.net);
+  if (c.autoActivate === false) document.getElementById('toggle-autoactivate')?.classList.remove('on');
+  else document.getElementById('toggle-autoactivate')?.classList.add('on');
   onNetChange();
 
-  // Apply wallets — server takes priority over localStorage
-  const savedWallets = serverData.wallets && Object.keys(serverData.wallets).length
-    ? serverData.wallets
-    : JSON.parse(localStorage.getItem('tgf2_wallets') || '{}');
+  // Wallets: server → localStorage → empty
+  let savedWallets = {};
+  if (serverData?.wallets && Object.keys(serverData.wallets).length) {
+    savedWallets = serverData.wallets;
+    try { localStorage.setItem('tgf2_wallets', JSON.stringify(savedWallets)); } catch(e) {}
+  } else {
+    try { savedWallets = JSON.parse(localStorage.getItem('tgf2_wallets') || '{}'); } catch(e) {}
+  }
 
   PROJECTS.forEach(p => {
     if (savedWallets[p.id]) {
@@ -865,7 +889,7 @@ async function loadConfigFromStorage() {
     }
   });
 
-  // Re-render after loading
+  // Re-render
   renderProjTabs();
   renderAllProjPanels();
   populateWithdrawSelect();
@@ -1920,12 +1944,49 @@ function renderTxTable() {
 // ═══════════════════════════════════════════════════════════════
 // NAVIGATION & UI
 // ═══════════════════════════════════════════════════════════════
+// Lightweight wallet sync — just wallets, no config re-apply
+async function syncWalletsFromServer() {
+  try {
+    const res = await fetch('/storage');
+    if (!res.ok) return;
+    const serverData = await res.json();
+    if (!serverData?.wallets || !Object.keys(serverData.wallets).length) return;
+
+    let changed = false;
+    PROJECTS.forEach(p => {
+      const sw = serverData.wallets[p.id];
+      if (!sw) return;
+      // Only update if server data differs (compare counts as quick check)
+      const localActive   = DB[p.id].active?.length   || 0;
+      const localArchived = DB[p.id].archived?.length  || 0;
+      const srvActive     = sw.active?.length   || 0;
+      const srvArchived   = sw.archived?.length || 0;
+      if (srvActive !== localActive || srvArchived !== localArchived) {
+        DB[p.id].active   = sw.active   || [];
+        DB[p.id].archived = sw.archived || [];
+        DB[p.id].txs      = sw.txs      || [];
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      renderAllProjPanels();
+      populateWithdrawSelect();
+      updateGlobalStats();
+      console.log('[Sync] wallets updated from server');
+    }
+    // Update localStorage
+    try { localStorage.setItem('tgf2_wallets', JSON.stringify(serverData.wallets)); } catch(e) {}
+  } catch(e) { /* silent — no network is fine */ }
+}
+
 function setMainPage(id, el) {
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
   document.querySelectorAll('.topbar-nav-btn').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
-  if(id==='withdraw') loadProviders();
+  if(id==='withdraw') { loadProviders(); syncWalletsFromServer(); }
+  if(id==='wallets')  syncWalletsFromServer();
 }
 
 function sideNav(el, page) {
@@ -1935,15 +1996,18 @@ function sideNav(el, page) {
   document.getElementById('page-'+page).classList.add('active');
   const map = { wallets:'Кошельки', withdraw:'Вывод', config:'Настройки' };
   document.querySelectorAll('.topbar-nav-btn').forEach(b=>{ if(b.textContent.trim()===map[page]) b.classList.add('active'); });
-  if(page==='withdraw') loadProviders();
+  if(page==='withdraw') { loadProviders(); syncWalletsFromServer(); }
+  if(page==='wallets')  syncWalletsFromServer();
 }
 
 function switchProjTab(id) {
   currentProjId = id;
   document.querySelectorAll('.proj-tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('ptab-'+id).classList.add('active');
+  document.getElementById('ptab-'+id)?.classList.add('active');
   document.querySelectorAll('.proj-panel').forEach(p=>p.classList.remove('active'));
-  document.getElementById('ppanel-'+id).classList.add('active');
+  document.getElementById('ppanel-'+id)?.classList.add('active');
+  // Sync wallets when switching project tab
+  syncWalletsFromServer();
 }
 
 function switchInner(projId, tab, el) {
@@ -2063,9 +2127,16 @@ function toast(msg,type='info') {
 // BOOT
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
-  // loadConfigFromStorage is async — it loads from server then re-renders
+  // First check if we have a valid session
+  await checkSession();
+  // Then load config/wallets from server
   await loadConfigFromStorage();
-  checkSession();
+
+  // Auto-sync wallets every 30s and when tab becomes visible
+  setInterval(() => { if (currentRole) syncWalletsFromServer(); }, 30000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && currentRole) syncWalletsFromServer();
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -2128,6 +2199,8 @@ async function doLogin() {
 
     document.getElementById('auth-overlay').style.display = 'none';
     applyRole(data.role);
+    // Reload config and wallets from server after login
+    await loadConfigFromStorage();
     toast(`Добро пожаловать, ${currentRole.label}!`, 'success');
 
   } catch(e) {
@@ -2312,6 +2385,7 @@ async function checkSession() {
       currentRole = ROLES[data.role];
       document.getElementById('auth-overlay').style.display = 'none';
       applyRole(data.role);
+      // Config will be loaded by DOMContentLoaded after checkSession returns
     } else {
       // Token expired or invalid — clear session
       sessionStorage.removeItem('tgf_token');
