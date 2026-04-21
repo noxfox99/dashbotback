@@ -2072,17 +2072,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 // AUTH — ROLE-BASED ACCESS CONTROL
 // ═══════════════════════════════════════════════════════════════
 
-// ── HARDCODED PASSWORDS — change these directly in this file ──
-const PASSWORDS = {
-  admin: 'NOM7!jlPO098rgJNB',   // Super Admin — full access
-  mull:  'MJkiu786srQdgLOJ',    // User Mull   — tab Mull only
-  time:  'TBON68ettQ11!jl432AS',    // User Time   — tab Time only
-  sov:   'SnjOLKJbn8!jhjKKL0',     // User Sov    — tab Sov only
-  rail:  'Rbn909y0oON!4',    // User Rail   — tab Rail only
-  temp:  'TJem5*(MKL70O55',    // User Temp   — tab Temp only
-};
-
-// ── ROLES ──
+// ── ROLES — only role definitions here, NO passwords ──
 const ROLES = {
   admin: { label:'Super Admin', tabs:['mull','time','sov','rail','temp'], canWithdraw:true,  canConfig:true,  canSeeKeys:true  },
   mull:  { label:'Mull',        tabs:['mull'],                            canWithdraw:false, canConfig:false, canSeeKeys:false },
@@ -2092,34 +2082,60 @@ const ROLES = {
   temp:  { label:'Temp',        tabs:['temp'],                            canWithdraw:false, canConfig:false, canSeeKeys:false },
 };
 
-let currentRole = null; // set after login
+let currentRole = null;
+let authToken   = null; // session token from server
 
-function doLogin() {
+async function doLogin() {
   const userId = (document.getElementById('auth-user').value || '').trim().toLowerCase();
   const pass   = document.getElementById('auth-pass').value;
   const errEl  = document.getElementById('auth-error');
+  const btn    = document.querySelector('.auth-box .btn-primary');
 
-  if (!userId || !pass || !PASSWORDS[userId] || PASSWORDS[userId] !== pass) {
-    errEl.textContent = 'Неверный логин или пароль';
+  if (!userId || !pass) {
+    errEl.textContent = 'Введите логин и пароль';
     errEl.classList.add('show');
-    document.getElementById('auth-pass').value = '';
-    document.getElementById('auth-pass').focus();
     return;
   }
 
-  currentRole = ROLES[userId];
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin-el"></span> Вход…'; }
   errEl.classList.remove('show');
 
-  // Hide login screen
-  document.getElementById('auth-overlay').style.display = 'none';
+  try {
+    const res  = await fetch('/auth/login', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ userId, password: pass }),
+    });
+    const data = await res.json();
 
-  // Apply role restrictions
-  applyRole(userId);
+    if (!res.ok || data.error) {
+      errEl.textContent = data.error || 'Неверный логин или пароль';
+      errEl.classList.add('show');
+      document.getElementById('auth-pass').value = '';
+      document.getElementById('auth-pass').focus();
+      return;
+    }
 
-  // Store in sessionStorage (clears on tab close)
-  try { sessionStorage.setItem('tgf_role', userId); } catch(e) {}
+    authToken   = data.token;
+    currentRole = ROLES[data.role];
+    errEl.classList.remove('show');
 
-  toast(`Добро пожаловать, ${currentRole.label}!`, 'success');
+    // Store token in sessionStorage
+    try {
+      sessionStorage.setItem('tgf_token', authToken);
+      sessionStorage.setItem('tgf_role',  data.role);
+    } catch(e) {}
+
+    document.getElementById('auth-overlay').style.display = 'none';
+    applyRole(data.role);
+    toast(`Добро пожаловать, ${currentRole.label}!`, 'success');
+
+  } catch(e) {
+    errEl.textContent = 'Ошибка соединения с сервером';
+    errEl.classList.add('show');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '→ Войти'; }
+  }
 }
 
 function applyRole(userId) {
@@ -2233,7 +2249,15 @@ function exportWalletsCSV() {
 
 function doLogout() {
   currentRole = null;
-  try { sessionStorage.removeItem('tgf_role'); } catch(e) {}
+  // Notify server to invalidate token
+  if (authToken) {
+    fetch('/auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': authToken },
+    }).catch(() => {});
+    authToken = null;
+  }
+  try { sessionStorage.removeItem('tgf_token'); sessionStorage.removeItem('tgf_role'); } catch(e) {}
   document.getElementById('auth-user').value = '';
   document.getElementById('auth-pass').value = '';
   document.getElementById('auth-overlay').style.display = 'flex';
@@ -2272,13 +2296,26 @@ function guardKeys() {
 }
 
 // Check session on load — restore role if session exists
-function checkSession() {
+async function checkSession() {
   try {
-    const saved = sessionStorage.getItem('tgf_role');
-    if (saved && ROLES[saved]) {
-      currentRole = ROLES[saved];
+    const savedToken = sessionStorage.getItem('tgf_token');
+    const savedRole  = sessionStorage.getItem('tgf_role');
+    if (!savedToken) return;
+
+    // Verify token with server
+    const res = await fetch('/auth/check', {
+      headers: { 'x-auth-token': savedToken }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      authToken   = savedToken;
+      currentRole = ROLES[data.role];
       document.getElementById('auth-overlay').style.display = 'none';
-      applyRole(saved);
+      applyRole(data.role);
+    } else {
+      // Token expired or invalid — clear session
+      sessionStorage.removeItem('tgf_token');
+      sessionStorage.removeItem('tgf_role');
     }
   } catch(e) {}
 }
