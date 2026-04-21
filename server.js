@@ -422,13 +422,13 @@ app.post('/proxy/trongrid', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────
 // AUTH — passwords stored server-side only, never sent to client
 // ─────────────────────────────────────────────────────────────────
-const PASSWORDS = {
-  admin: 'NOM7!jlPO098rgJNB',   // Super Admin — full access
-  mull:  'MJkiu786srQdgLOJ',    // User Mull   — tab Mull only
-  time:  'TBON68ettQ11!jl432AS',    // User Time   — tab Time only
-  sov:   'SnjOLKJbn8!jhjKKL0',     // User Sov    — tab Sov only
-  rail:  'Rbn909y0oON!4',    // User Rail   — tab Rail only
-  temp:  'TJem5*(MKL70O55',    // User Temp   — tab Temp only
+const USERS = {
+  admin: { password: 'NOM7!jlPO098rgJNB', role: 'admin' },
+  mull:  { password: 'MJkiu786srQdgLOJ',  role: 'mull'  },
+  time:  { password: 'TBON68ettQ11!jl432AS',  role: 'time'  },
+  sov:   { password: 'SnjOLKJbn8!jhjKKL0',   role: 'sov'   },
+  rail:  { password: 'Rbn909y0oON!4',  role: 'rail'  },
+  temp:  { password: 'TJem5*(MKL70O55',  role: 'temp'  },
 };
 
 // Simple session tokens stored in memory
@@ -467,7 +467,10 @@ app.get('/auth/check', (req, res) => {
 // PERSISTENT STORAGE — data.json on server
 // Stores: wallets (with private keys), config per user role
 // ─────────────────────────────────────────────────────────────────
-const DATA_FILE = path.join(__dirname, 'data.json');
+// Data file: use /data if it exists (Railway Volume), otherwise local __dirname
+const DATA_DIR  = require('fs').existsSync('/data') ? '/data' : __dirname;
+const DATA_FILE = path.join(DATA_DIR, 'data.json');
+console.log('[Storage] data file:', DATA_FILE);
 
 function readData() {
   try {
