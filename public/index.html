@@ -1637,7 +1637,7 @@ function addTxToProject(fromAddr, tx) {
 // ═══════════════════════════════════════════════════════════════
 // WALLET MANAGEMENT
 // ═══════════════════════════════════════════════════════════════
-function archiveWallet(wid, projId) {
+async function archiveWallet(wid, projId) {
   const d = DB[projId];
   const idx = d.active.findIndex(w=>w.id===wid);
   if(idx===-1) return;
@@ -1649,7 +1649,7 @@ function archiveWallet(wid, projId) {
   toast('Кошелёк архивирован', 'success');
 }
 
-function unarchiveWallet(wid, projId) {
+async function unarchiveWallet(wid, projId) {
   const d = DB[projId];
   const idx = d.archived.findIndex(w=>w.id===wid);
   if(idx===-1) return;
