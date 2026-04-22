@@ -906,30 +906,53 @@ async function loadConfigFromStorage() {
   }).catch(() => {});
 }
 
-function saveWallets(projId) {
-  // Save to server — if projId given, save just that project
-  if (projId) {
-    fetch('/storage/wallets/' + projId, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(DB[projId])
-    }).catch(e => console.warn('[Storage] save wallets error:', e.message));
-  } else {
-    // Save all
-    const data = {};
-    PROJECTS.forEach(p => { data[p.id] = DB[p.id]; });
-    fetch('/storage', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallets: data })
-    }).catch(e => console.warn('[Storage] save all error:', e.message));
-  }
-  // Also keep localStorage as backup
+// Save lock — prevents syncWalletsFromServer from overwriting during active save
+let _savingWallets = false;
+
+async function saveWallets(projId) {
+  _savingWallets = true;
+
+  // Always save to localStorage immediately as instant backup
   try {
-    const data = {};
-    PROJECTS.forEach(p => { data[p.id] = DB[p.id]; });
-    localStorage.setItem('tgf2_wallets', JSON.stringify(data));
+    const snap = {};
+    PROJECTS.forEach(p => { snap[p.id] = DB[p.id]; });
+    localStorage.setItem('tgf2_wallets', JSON.stringify(snap));
   } catch(e) {}
+
+  const doSave = async (attempt) => {
+    try {
+      if (projId) {
+        const res = await fetch('/storage/wallets/' + projId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(DB[projId])
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+      } else {
+        const data = {};
+        PROJECTS.forEach(p => { data[p.id] = DB[p.id]; });
+        const res = await fetch('/storage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wallets: data })
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+      }
+      console.log('[Storage] wallets saved OK' + (projId ? ' proj=' + projId : ''));
+    } catch(e) {
+      console.warn(`[Storage] save attempt ${attempt} failed:`, e.message);
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, 1000 * attempt));
+        await doSave(attempt + 1);
+      } else {
+        console.error('[Storage] all save attempts failed — wallet may be lost!');
+        toast('⚠ Ошибка сохранения кошелька — проверьте подключение', 'error');
+      }
+    }
+  };
+
+  await doSave(1);
+  _savingWallets = false;
 }
 
 function clearAllConfig() {
@@ -1278,7 +1301,8 @@ async function executeGen() {
       owner: currentRole ? (currentRole.canWithdraw ? 'admin' : Object.keys(ROLES).find(k => ROLES[k] === currentRole) || 'admin') : 'admin',
     };
     DB[genTargetProj].active.push(newWallet);
-    saveWallets();
+    // Save FIRST before any other async operations
+    await saveWallets(genTargetProj);
     rerenderProj(genTargetProj);
     populateWithdrawSelect();
     updateGlobalStats();
@@ -1338,7 +1362,7 @@ async function fetchGasFreeInfo(wallet, projId, showInModal = false) {
     wallet.enrolled    = true;
     wallet.gasFreeAddr = info.gasFreeAddress || info.gasfreeAddress || null;
     wallet.nonce       = info.nonce || 0;
-    saveWallets();
+    await saveWallets();
     rerenderProj(projId);
 
     if(showInModal) {
@@ -1620,7 +1644,7 @@ function archiveWallet(wid, projId) {
   const w = d.active.splice(idx,1)[0];
   w.archivedAt = new Date().toISOString().split('T')[0];
   d.archived.push(w);
-  saveWallets(projId); rerenderProj(projId); updateGlobalStats();
+  await saveWallets(projId); rerenderProj(projId); updateGlobalStats();
   populateWithdrawSelect();
   toast('Кошелёк архивирован', 'success');
 }
@@ -1632,7 +1656,7 @@ function unarchiveWallet(wid, projId) {
   const w = d.archived.splice(idx,1)[0];
   delete w.archivedAt;
   d.active.push(w);
-  saveWallets(projId); rerenderProj(projId); updateGlobalStats();
+  await saveWallets(projId); rerenderProj(projId); updateGlobalStats();
   populateWithdrawSelect();
   toast('Кошелёк восстановлен', 'success');
 }
@@ -1672,11 +1696,16 @@ function renderAllProjPanels() {
 // Legacy wallets with no owner: visible only to admin
 function visibleWallets(walletList) {
   if (!currentRole) return [];
-  if (currentRole.canWithdraw) return walletList; // admin sees all
+  if (currentRole.canWithdraw) {
+    // Admin: all wallets, admin-owned first then others sorted by owner
+    return [...walletList].sort((a, b) => {
+      const aAdmin = (a.owner === 'admin' || !a.owner) ? 0 : 1;
+      const bAdmin = (b.owner === 'admin' || !b.owner) ? 0 : 1;
+      return aAdmin - bAdmin;
+    });
+  }
   const userId = (() => { try { return sessionStorage.getItem('tgf_role'); } catch(e){ return null; } })();
   if (!userId) return [];
-  // Show only wallets explicitly owned by this user
-  // Wallets with owner='admin' or owner of another user are NOT shown
   return walletList.filter(w => w.owner === userId);
 }
 
@@ -1745,7 +1774,7 @@ function renderWalletItem(w, projId, archived) {
       ${w.gasFreeAddr
         ? `<div style="margin-top:7px">
              <div style="font-size:9px;color:#3d7a6a;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">▼ Адрес для пополнения USDT (GasFree)</div>
-             <div style="font-family:'Space Mono',monospace;font-size:13px;color:#6ee7b7;word-break:break-all;cursor:pointer;padding:5px 8px;background:#0a1520;border-radius:4px;border:1px solid rgba(0,229,255,0.15)" onclick="copyRaw('${escHtml(w.gasFreeAddr)}')" title="Нажмите для копирования">${escHtml(w.gasFreeAddr)}</div>
+             <div style="font-family:'Space Mono',monospace;font-size:10px;color:#6ee7b7;word-break:break-all;cursor:pointer;padding:5px 8px;background:#0a1520;border-radius:4px;border:1px solid rgba(0,229,255,0.15)" onclick="copyRaw('${escHtml(w.gasFreeAddr)}')" title="Нажмите для копирования">${escHtml(w.gasFreeAddr)}</div>
            </div>`
         : `<div style="font-size:9px;color:#b07830;margin-top:5px">⚠ Нажмите «⚡ GF статус» чтобы получить адрес для пополнения</div>`
       }
@@ -1976,7 +2005,8 @@ function renderTxTable() {
 // ═══════════════════════════════════════════════════════════════
 // Lightweight wallet sync — just wallets, no config re-apply
 async function syncWalletsFromServer() {
-  if (!currentRole) return; // not logged in yet
+  if (!currentRole) return;
+  if (_savingWallets) return; // don't overwrite during active save
   try {
     const res = await fetch('/storage');
     if (!res.ok) return;
