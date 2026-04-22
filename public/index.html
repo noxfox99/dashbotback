@@ -1745,7 +1745,7 @@ function renderWalletItem(w, projId, archived) {
       ${w.gasFreeAddr
         ? `<div style="margin-top:7px">
              <div style="font-size:9px;color:#3d7a6a;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">▼ Адрес для пополнения USDT (GasFree)</div>
-             <div style="font-family:'Space Mono',monospace;font-size:10px;color:#6ee7b7;word-break:break-all;cursor:pointer;padding:5px 8px;background:#0a1520;border-radius:4px;border:1px solid rgba(0,229,255,0.15)" onclick="copyRaw('${escHtml(w.gasFreeAddr)}')" title="Нажмите для копирования">${escHtml(w.gasFreeAddr)}</div>
+             <div style="font-family:'Space Mono',monospace;font-size:13px;color:#6ee7b7;word-break:break-all;cursor:pointer;padding:5px 8px;background:#0a1520;border-radius:4px;border:1px solid rgba(0,229,255,0.15)" onclick="copyRaw('${escHtml(w.gasFreeAddr)}')" title="Нажмите для копирования">${escHtml(w.gasFreeAddr)}</div>
            </div>`
         : `<div style="font-size:9px;color:#b07830;margin-top:5px">⚠ Нажмите «⚡ GF статус» чтобы получить адрес для пополнения</div>`
       }
