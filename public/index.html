@@ -1651,10 +1651,10 @@ async function enrollWalletGF(wid, projId) {
 function renderProjTabs() {
   const bar = document.getElementById('proj-tabs-bar');
   bar.innerHTML = PROJECTS.map(p => {
-    const vis = visibleWallets(DB[p.id].active).length;
+    const visA = visibleWallets(DB[p.id].active).length;
     const hidden = currentRole && !currentRole.canWithdraw && !currentRole.tabs.includes(p.id) ? 'style="display:none"' : '';
     return `<div class="proj-tab ${p.id===currentProjId?'active':''}" id="ptab-${p.id}" onclick="switchProjTab('${p.id}')" ${hidden}>
-      ${p.name}<span class="proj-tab-count">${vis}</span>
+      ${p.name}${visA > 0 ? `<span class="proj-tab-count">${visA}</span>` : ''}
     </div>`;
   }).join('');
 }
@@ -1662,6 +1662,8 @@ function renderProjTabs() {
 function renderAllProjPanels() {
   const host = document.getElementById('proj-panels-host');
   host.innerHTML = PROJECTS.map((p,i) => renderProjPanel(p, i===0)).join('');
+  // Always update tab bar counts after re-render
+  renderProjTabs();
 }
 
 // Returns wallets visible to current user
@@ -1734,7 +1736,7 @@ function renderWalletItem(w, projId, archived) {
   <div class="wallet-item ${archived?'archived':''}" id="witem-${w.id}">
     <div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
-        ${w.label?`<span style="font-size:11px;font-weight:700;color:#7e9ab5">${escHtml(w.label)}</span>`:''}
+        ${w.label?`<span style="font-size:11px;font-weight:700;color:#7e9ab5">${w.owner==='admin'?'👑 ':''}${escHtml(w.label)}</span>`:w.owner==='admin'?'<span style="font-size:13px">👑</span>':''}
         ${w.enrolled?'<span class="badge badge-green">⚡ GasFree</span>':'<span class="badge badge-gray">Не подключён</span>'}
         ${archived?'<span class="badge badge-gray">Архив</span>':''}
       </div>
@@ -2072,10 +2074,11 @@ function rerenderProj(projId) {
   const tmp = document.createElement('div');
   tmp.innerHTML = renderProjPanel(proj, isActive);
   panel.replaceWith(tmp.firstElementChild);
+  // Update tab badge
   const tabEl = document.getElementById('ptab-'+projId);
   if(tabEl) {
     const visCount = visibleWallets(DB[projId].active).length;
-    tabEl.innerHTML = `${proj.name}<span class="proj-tab-count">${visCount}</span>`;
+    tabEl.innerHTML = `${proj.name}${visCount > 0 ? `<span class="proj-tab-count">${visCount}</span>` : ''}`;
     if(isActive) tabEl.classList.add('active');
   }
   reapplyTabVisibility();
