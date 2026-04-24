@@ -1,0 +1,17 @@
+{
+  "name": "TRON GasFree Panel",
+  "short_name": "TRONGF",
+  "description": "TRON GasFree wallet management dashboard",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f0f2f7",
+  "theme_color": "#3d7a6a",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icon-120.png", "sizes": "120x120", "type": "image/png" },
+    { "src": "/icon-152.png", "sizes": "152x152", "type": "image/png" },
+    { "src": "/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
