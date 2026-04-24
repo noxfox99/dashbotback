@@ -883,10 +883,25 @@ async function loadConfigFromStorage() {
 
   PROJECTS.forEach(p => {
     if (savedWallets[p.id]) {
-      // Assign owner = tab id for legacy wallets without owner
-      DB[p.id].active   = (savedWallets[p.id].active   || []).map(w => w.owner ? w : { ...w, owner: 'admin' });
-      DB[p.id].archived = (savedWallets[p.id].archived || []).map(w => w.owner ? w : { ...w, owner: 'admin' });
-      DB[p.id].txs      = savedWallets[p.id].txs || [];
+      const sv = savedWallets[p.id];
+      // Merge with existing DB (may have wallets added before load completed)
+      const mergeWithLocal = (srvList, localList) => {
+        const srvById = {};
+        (srvList || []).forEach(w => { srvById[w.id] = w; });
+        const merged = (srvList || []).map(w => ({
+          ...(localList?.find(l => l.id === w.id) || {}),
+          ...w,
+          owner: w.owner || 'admin',
+        }));
+        // Keep any local-only wallets
+        (localList || []).forEach(w => {
+          if (!srvById[w.id]) merged.push(w);
+        });
+        return merged;
+      };
+      DB[p.id].active   = mergeWithLocal(sv.active,   DB[p.id].active);
+      DB[p.id].archived = mergeWithLocal(sv.archived,  DB[p.id].archived);
+      DB[p.id].txs      = sv.txs || DB[p.id].txs || [];
     }
   });
 
@@ -908,6 +923,58 @@ async function loadConfigFromStorage() {
 
 // Save lock — prevents syncWalletsFromServer from overwriting during active save
 let _savingWallets = false;
+
+// Critical save — used for new wallets. Returns true if saved successfully.
+async function saveWalletCritical(projId, walletId) {
+  _savingWallets = true;
+
+  // Save to localStorage immediately
+  try {
+    const snap = {};
+    PROJECTS.forEach(p => { snap[p.id] = DB[p.id]; });
+    localStorage.setItem('tgf2_wallets', JSON.stringify(snap));
+  } catch(e) {}
+
+  let saved = false;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      const res = await fetch('/storage/wallets/' + projId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(DB[projId])
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+
+      // Verify wallet actually made it to server
+      const check = await fetch('/storage');
+      if (check.ok) {
+        const data = await check.json();
+        const serverWallets = data?.wallets?.[projId]?.active || [];
+        if (serverWallets.some(w => w.id === walletId)) {
+          console.log(`[Storage] wallet ${walletId} verified on server ✓`);
+          saved = true;
+          break;
+        } else {
+          throw new Error('Wallet not found after save — retrying');
+        }
+      }
+    } catch(e) {
+      console.warn(`[Storage] critical save attempt ${attempt}/5:`, e.message);
+      if (attempt < 5) await new Promise(r => setTimeout(r, 1500 * attempt));
+    }
+  }
+
+  _savingWallets = false;
+
+  if (!saved) {
+    console.error('[Storage] CRITICAL: wallet not saved after 5 attempts!');
+    // Show persistent error
+    toast('🚨 КРИТИЧЕСКАЯ ОШИБКА: кошелёк не сохранён на сервере! Запишите ключ вручную.', 'error');
+    // Keep toast visible longer
+    setTimeout(() => toast('🚨 Ключ НЕ сохранён — скопируйте его прямо сейчас!', 'error'), 4000);
+  }
+  return saved;
+}
 
 async function saveWallets(projId) {
   _savingWallets = true;
@@ -1301,8 +1368,15 @@ async function executeGen() {
       owner: currentRole ? (currentRole.canWithdraw ? 'admin' : Object.keys(ROLES).find(k => ROLES[k] === currentRole) || 'admin') : 'admin',
     };
     DB[genTargetProj].active.push(newWallet);
-    // Save FIRST before any other async operations
-    await saveWallets(genTargetProj);
+
+    // CRITICAL: save and verify before proceeding
+    const saved = await saveWalletCritical(genTargetProj, newWallet.id);
+
+    // Show key prominently if save failed so user can copy it manually
+    if (!saved) {
+      document.getElementById('gr-key').classList.add('show');
+    }
+
     rerenderProj(genTargetProj);
     populateWithdrawSelect();
     updateGlobalStats();
@@ -2003,7 +2077,7 @@ function renderTxTable() {
 // ═══════════════════════════════════════════════════════════════
 // NAVIGATION & UI
 // ═══════════════════════════════════════════════════════════════
-// Lightweight wallet sync — just wallets, no config re-apply
+// Lightweight wallet sync — merges server data with local, never loses local wallets
 async function syncWalletsFromServer() {
   if (!currentRole) return;
   if (_savingWallets) return; // don't overwrite during active save
@@ -2017,15 +2091,45 @@ async function syncWalletsFromServer() {
     PROJECTS.forEach(p => {
       const sw = serverData.wallets[p.id];
       if (!sw) return;
-      const localActive   = DB[p.id].active?.length   || 0;
-      const localArchived = DB[p.id].archived?.length  || 0;
-      const srvActive     = sw.active?.length   || 0;
-      const srvArchived   = sw.archived?.length || 0;
-      if (srvActive !== localActive || srvArchived !== localArchived) {
-        // Assign owner based on tab if missing (legacy/imported wallets)
-        DB[p.id].active   = (sw.active   || []).map(w => w.owner ? w : { ...w, owner: 'admin' });
-        DB[p.id].archived = (sw.archived || []).map(w => w.owner ? w : { ...w, owner: 'admin' });
-        DB[p.id].txs      = sw.txs || [];
+
+      // Merge strategy: server is source of truth for existing wallets,
+      // but we never drop local wallets that aren't on server yet
+      const mergeList = (localList, srvList) => {
+        const srvById = {};
+        (srvList || []).forEach(w => { srvById[w.id] = w; });
+        const localById = {};
+        (localList || []).forEach(w => { localById[w.id] = w; });
+
+        // Start with server list (with owner fix)
+        const merged = (srvList || []).map(w => ({
+          ...(localById[w.id] || {}), // keep any local fields (privKey etc)
+          ...w,                        // server wins for most fields
+          owner: w.owner || 'admin',
+          privKey: (localById[w.id] || w).privKey || w.privKey || '',
+        }));
+
+        // Add any local wallets not yet on server (just saved, not synced)
+        (localList || []).forEach(w => {
+          if (!srvById[w.id]) {
+            merged.push(w); // keep local-only wallet
+            changed = true;
+          }
+        });
+
+        return merged;
+      };
+
+      const newActive   = mergeList(DB[p.id].active,   sw.active);
+      const newArchived = mergeList(DB[p.id].archived,  sw.archived);
+
+      // Check if anything actually changed
+      const activeChanged   = JSON.stringify(newActive)   !== JSON.stringify(DB[p.id].active);
+      const archivedChanged = JSON.stringify(newArchived) !== JSON.stringify(DB[p.id].archived);
+
+      if (activeChanged || archivedChanged) {
+        DB[p.id].active   = newActive;
+        DB[p.id].archived = newArchived;
+        DB[p.id].txs      = sw.txs || DB[p.id].txs || [];
         changed = true;
       }
     });
