@@ -1097,21 +1097,39 @@ async function gfPost(endpoint, body) {
 // ═══════════════════════════════════════════════════════════════
 // TRONGRID — BALANCES
 // ═══════════════════════════════════════════════════════════════
+const _balanceCache = new Map(); // address → { usdt, trx, ts }
+const CACHE_TTL = 60_000; // 60 seconds
+const REQUEST_DELAY = 350; // ms between requests
+
 async function fetchUSDTBalance(address) {
+  // Return cached value if fresh
+  const cached = _balanceCache.get(address);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) {
+    return { usdt: cached.usdt, trx: cached.trx };
+  }
+
   const { tgKey, rpc, usdt } = cfg();
   const res = await fetch('/proxy/trongrid', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tgPath: `/v1/accounts/${address}`, method: 'GET', apiKey: tgKey, rpc })
   });
-  if(!res.ok) throw new Error(`TronGrid proxy ${res.status}`);
+
+  if (res.status === 429) throw new Error('rate_limit');
+  if (!res.ok) throw new Error(`TronGrid ${res.status}`);
+
   const data = await res.json();
   const acct = data.data?.[0];
-  if(!acct) return { usdt: 0, trx: 0 };
-  const trx = (acct.balance || 0) / 1e6;
-  const usdtRaw = acct.trc20?.find(t => t[usdt])?.[usdt] || '0';
-  return { usdt: parseFloat(usdtRaw) / 1e6, trx };
+  const result = { usdt: 0, trx: 0 };
+  if (acct) {
+    result.trx = (acct.balance || 0) / 1e6;
+    const usdtRaw = acct.trc20?.find(t => t[usdt])?.[usdt] || '0';
+    result.usdt = parseFloat(usdtRaw) / 1e6;
+  }
+  _balanceCache.set(address, { ...result, ts: Date.now() });
+  return result;
 }
+
 
 async function fetchTxHistory(address) {
   const { tgKey, rpc, usdt } = cfg();
@@ -1482,36 +1500,44 @@ async function refreshAllBalances() {
   const allWallets = [];
   PROJECTS.forEach(p => DB[p.id].active.forEach(w => allWallets.push({ w, projId: p.id })));
 
-  let ok = 0, fail = 0;
-  await Promise.allSettled(allWallets.map(async ({ w, projId }) => {
+  let ok = 0, fail = 0, cached_n = 0;
+
+  for (const { w, projId } of allWallets) {
+    const balAddr = w.gasFreeAddr || w.addr;
+    const balEl   = document.getElementById(`bal-${w.id}`);
+    const usdEl   = document.getElementById(`usd-${w.id}`);
+
+    const isCached = _balanceCache.has(balAddr) && Date.now() - _balanceCache.get(balAddr).ts < CACHE_TTL;
+    if (!isCached && balEl) { balEl.textContent = '…'; balEl.className = 'wallet-balance loading'; }
+
     try {
-      // Update balance display to loading state
-      const balEl = document.getElementById(`bal-${w.id}`);
-      if(balEl) { balEl.textContent = '…'; balEl.className = 'wallet-balance loading'; }
-
-      const balAddr = w.gasFreeAddr || w.addr; // prefer GasFree address
       const { usdt, trx } = await fetchUSDTBalance(balAddr);
-      w.balance = usdt;
-      w.trx = trx;
-      ok++;
-
-      if(balEl) {
-        balEl.textContent = fmt(usdt) + ' USDT';
-        balEl.className = 'wallet-balance' + (usdt === 0 ? ' zero' : '');
-      }
-      const usdEl = document.getElementById(`usd-${w.id}`);
-      if(usdEl) usdEl.textContent = `≈ $${fmt(usdt)} · ${trx.toFixed(2)} TRX`;
+      w.balance = usdt; w.trx = trx;
+      if (balEl) { balEl.textContent = fmt(usdt) + ' USDT'; balEl.className = 'wallet-balance' + (usdt===0?' zero':''); }
+      if (usdEl) usdEl.textContent = `≈ $${fmt(usdt)} · ${trx.toFixed(2)} TRX`;
+      isCached ? cached_n++ : ok++;
+      if (!isCached) await new Promise(r => setTimeout(r, REQUEST_DELAY));
     } catch(e) {
-      fail++;
-      const balEl = document.getElementById(`bal-${w.id}`);
-      if(balEl) { balEl.textContent = 'Ошибка'; balEl.className = 'wallet-balance zero'; }
+      if (e.message === 'rate_limit') {
+        if (balEl) { balEl.textContent = '⏳'; balEl.className = 'wallet-balance zero'; }
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+          const { usdt, trx } = await fetchUSDTBalance(balAddr);
+          w.balance = usdt; w.trx = trx;
+          if (balEl) { balEl.textContent = fmt(usdt) + ' USDT'; balEl.className = 'wallet-balance' + (usdt===0?' zero':''); }
+          ok++;
+        } catch { fail++; if (balEl) { balEl.textContent = '—'; balEl.className = 'wallet-balance zero'; } }
+      } else {
+        fail++;
+        if (balEl) { balEl.textContent = '—'; balEl.className = 'wallet-balance zero'; }
+      }
     }
-  }));
+  }
 
   saveWallets();
   updateGlobalStats();
   btn.classList.remove('spinning');
-  toast(`Обновлено: ${ok} кошельков${fail ? `, ошибок: ${fail}` : ''} ✓`, 'success');
+  toast(`Обновлено: ${ok}${cached_n ? ` (+${cached_n} кеш)` : ''}${fail ? `, ошибок: ${fail}` : ''} ✓`, 'success');
 }
 
 async function refreshSingleBalance(wid, projId) {
